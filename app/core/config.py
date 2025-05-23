@@ -1,6 +1,84 @@
 import os
-from pydantic import BaseSettings, EmailStr
+from typing import List, Optional
+from pydantic import BaseSettings, EmailStr, Field, field_validator
 from functools import lru_cache
+
+
+class CORSSettings(BaseSettings):
+    """CORS configuration settings."""
+    
+    allowed_origins: List[str] = Field(default=["*"], env="CORS_ALLOWED_ORIGINS")
+    allowed_methods: List[str] = Field(default=["*"], env="CORS_ALLOWED_METHODS")
+    allowed_headers: List[str] = Field(default=["*"], env="CORS_ALLOWED_HEADERS")
+    allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
+
+
+class RedisSettings(BaseSettings):
+    """Redis configuration settings."""
+    
+    host: str = Field(default="localhost", env="REDIS_HOST")
+    port: int = Field(default=6379, env="REDIS_PORT")
+    password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    db: int = Field(default=0, env="REDIS_DB")
+    url: Optional[str] = Field(default=None, env="REDIS_URL")
+    max_connections: int = Field(default=10, env="REDIS_MAX_CONNECTIONS")
+    
+    @field_validator("url", always=True)
+    def build_redis_url(cls, v, values):
+        if v:
+            return v
+        
+        host = values.get("host", "localhost")
+        port = values.get("port", 6379)
+        password = values.get("password")
+        db = values.get("db", 0)
+        
+        if password:
+            return f"redis://:{password}@{host}:{port}/{db}"
+        return f"redis://{host}:{port}/{db}"
+
+
+class CelerySettings(BaseSettings):
+    """Celery configuration settings."""
+    
+    broker_url: str = Field(..., env="CELERY_BROKER_URL")
+    result_backend: str = Field(..., env="CELERY_RESULT_BACKEND")
+    task_serializer: str = Field(default="json", env="CELERY_TASK_SERIALIZER")
+    accept_content: List[str] = Field(default=["json"], env="CELERY_ACCEPT_CONTENT")
+    result_serializer: str = Field(default="json", env="CELERY_RESULT_SERIALIZER")
+    timezone: str = Field(default="UTC", env="CELERY_TIMEZONE")
+    enable_utc: bool = Field(default=True, env="CELERY_ENABLE_UTC")
+
+
+class EmailSettings(BaseSettings):
+    """Email configuration settings."""
+    
+    smtp_host: str = Field(..., env="EMAIL_SMTP_HOST")
+    smtp_port: int = Field(default=587, env="EMAIL_SMTP_PORT")
+    smtp_username: str = Field(..., env="EMAIL_SMTP_USERNAME")
+    smtp_password: str = Field(..., env="EMAIL_SMTP_PASSWORD")
+    use_tls: bool = Field(default=True, env="EMAIL_USE_TLS")
+    use_ssl: bool = Field(default=False, env="EMAIL_USE_SSL")
+    from_email: EmailStr = Field(..., env="EMAIL_FROM_EMAIL")
+    from_name: str = Field(default="FastAPI App", env="EMAIL_FROM_NAME")
+    
+    # AWS SES settings (optional)
+    aws_access_key_id: Optional[str] = Field(default=None, env="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: Optional[str] = Field(default=None, env="AWS_SECRET_ACCESS_KEY")
+    aws_region: Optional[str] = Field(default="us-east-1", env="AWS_REGION")
+
+
+class StorageSettings(BaseSettings):
+    """File storage configuration settings."""
+    
+    default_storage: str = Field(default="local", env="DEFAULT_STORAGE")  # local, s3
+    local_storage_path: str = Field(default="./uploads", env="LOCAL_STORAGE_PATH")
+    
+    # AWS S3 settings
+    aws_s3_bucket: Optional[str] = Field(default=None, env="AWS_S3_BUCKET")
+    aws_s3_region: Optional[str] = Field(default="us-east-1", env="AWS_S3_REGION")
+    aws_s3_access_key_id: Optional[str] = Field(default=None, env="AWS_S3_ACCESS_KEY_ID")
+    aws_s3_secret_access_key: Optional[str] = Field(default=None, env="AWS_S3_SECRET_ACCESS_KEY")
 
 
 class Settings(BaseSettings):
@@ -8,11 +86,18 @@ class Settings(BaseSettings):
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
     database_url = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/etl_db")
 
-    smtp_host: str = os.getenv("SMTP_HOST", "smtp.mailtrap.io")
-    smtp_port: int = int(os.getenv("SMTP_PORT", 587))
-    smtp_user: str = os.getenv("SMTP_USER", "your_smtp_user")
-    smtp_password: str = os.getenv("SMTP_PASSWORD", "your_smtp_password")
-    smtp_from_email: EmailStr = os.getenv("SMTP_FROM_EMAIL", "noreply@example.com")
+    email_settings = EmailSettings()
+    cors_settings = CORSSettings()
+    redis_settings = RedisSettings()
+    storage_settings = StorageSettings()
+    celery_settings = CelerySettings()
+
+    rate_limit_requests: int = Field(default=100, env="RATE_LIMIT_REQUESTS")
+    rate_limit_window: int = Field(default=60, env="RATE_LIMIT_WINDOW")  # seconds
+
+    # Pagination
+    default_page_size: int = Field(default=10, env="DEFAULT_PAGE_SIZE")
+    max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
     class Config:
         env_file = ".env"

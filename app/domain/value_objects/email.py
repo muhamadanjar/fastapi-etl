@@ -1,7 +1,17 @@
 import re
+from typing import Any
 
 class Email:
+
+    # RFC 5322 compliant email regex (simplified version)
+    EMAIL_REGEX = re.compile(
+        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    )
+
     def __init__(self, address: str):
+        if not address:
+            raise ValueError("Email cannot be empty")
+        
         if not self._is_valid_email(address):
             raise ValueError(f"Invalid email address: {address}")
         self.address = address
@@ -17,3 +27,8 @@ class Email:
 
     def __hash__(self):
         return hash(self.address)
+    
+    @property
+    def value(self) -> str:
+        """Get email address value."""
+        return self.address
