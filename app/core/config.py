@@ -72,13 +72,37 @@ class StorageSettings(BaseSettings):
     """File storage configuration settings."""
     
     default_storage: str = Field(default="local", env="DEFAULT_STORAGE")  # local, s3
+    max_file_size: int = 50 * 1024 * 1024  # 50MB in bytes
     local_storage_path: str = Field(default="./uploads", env="LOCAL_STORAGE_PATH")
+    allowed_file_extensions: Optional[List[str]] = None
+    preserve_filename: bool = True
     
     # AWS S3 settings
     aws_s3_bucket: Optional[str] = Field(default=None, env="AWS_S3_BUCKET")
     aws_s3_region: Optional[str] = Field(default="us-east-1", env="AWS_S3_REGION")
     aws_s3_access_key_id: Optional[str] = Field(default=None, env="AWS_S3_ACCESS_KEY_ID")
     aws_s3_secret_access_key: Optional[str] = Field(default=None, env="AWS_S3_SECRET_ACCESS_KEY")
+
+    # MinIO settings (uses S3-compatible API)
+    minio_endpoint: Optional[str] = None
+    minio_access_key: Optional[str] = None
+    minio_secret_key: Optional[str] = None
+    minio_bucket: Optional[str] = None
+    minio_region: str = "us-east-1"
+    minio_secure: bool = True
+
+    # File validation settings
+    validate_file_content: bool = True
+    scan_for_malware: bool = False  # Future feature
+    
+    # Temporary file settings
+    temp_file_expiry_hours: int = 24
+    temp_cleanup_interval_hours: int = 6
+    
+    # Image processing settings (future feature)
+    auto_generate_thumbnails: bool = False
+    thumbnail_sizes: List[int] = [150, 300, 600]
+    image_quality: int = 85
 
 
 class Settings(BaseSettings):

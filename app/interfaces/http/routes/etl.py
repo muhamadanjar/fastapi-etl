@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
-from app.infrastructure.message_broker.publisher import publish_etl_job_with_file
+from app.infrastructure.messaging.publisher import publish_etl_job_with_file
 from app.infrastructure.db.etl_repo_impl import ETLRepositoryImpl
 import shutil
 import uuid
