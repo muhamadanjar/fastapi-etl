@@ -5,7 +5,7 @@ from uuid import UUID
 from ..entities.user_entity import User
 from ..value_objects.email import Email
 from ..repositories.user_repository import UserRepositoryInterface
-from ..exceptions.user_exceptions import (
+from ..exceptions.domain_exception import (
     UserAlreadyExistsError,
     UserNotFoundError,
     InvalidCredentialsError

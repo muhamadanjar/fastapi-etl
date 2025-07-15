@@ -46,6 +46,7 @@ class ValidationException(AppException):
             status_code=422,
         )
 
+
 class NotFoundError(AppException):
     """Exception raised when a resource is not found."""
     

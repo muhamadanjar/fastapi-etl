@@ -1,7 +1,8 @@
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator
 from functools import lru_cache
+from pydantic_settings import BaseSettings
 
 
 class CORSSettings(BaseSettings):
@@ -108,7 +109,7 @@ class StorageSettings(BaseSettings):
 class Settings(BaseSettings):
     broker_url = os.getenv("RABBITMQ_URL", "pyamqp://guest@rabbitmq//")
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    database_url = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/etl_db")
+    database_url = Field(default="postgresql://user:password@db:5432/etl_db", env="DATABASE_URL")
 
     email_settings = EmailSettings()
     cors_settings = CORSSettings()

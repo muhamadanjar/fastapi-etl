@@ -1,5 +1,4 @@
 from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
-from app.infrastructure.messaging.publisher import publish_etl_job_with_file
 from app.infrastructure.db.etl_repo_impl import ETLRepositoryImpl
 import shutil
 import uuid
@@ -13,7 +12,7 @@ repo = ETLRepositoryImpl()
 
 @router.post("/run")
 def run_etl(source: str):
-    publish_etl_job_with_file(source)(source)
+    # publish_etl_job_with_file(source)(source)
     return {"message": "ETL job submitted"}
 
 @router.post("/upload")
