@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
-from app.interfaces.task.task_service import TaskService
+from app.interfaces.background.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 

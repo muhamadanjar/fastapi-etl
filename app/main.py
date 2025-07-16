@@ -23,7 +23,6 @@ from app.interfaces.http.routes import (
 )
 
 import uvicorn
-# settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -71,6 +70,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 recovery_interval=60
             )
             print("✅ Cache system initialized (Redis + Memory fallback)")
+
+            setup_logging()
             
         except Exception as e:
             print(f"⚠️  Redis unavailable: {e}")

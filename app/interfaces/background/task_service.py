@@ -5,7 +5,7 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from celery.result import AsyncResult
-from app.infrastructure.tasks.celery_app import celery_app
+from app.tasks import celery_app
 from app.infrastructure.tasks.tasks import email_tasks, data_sync_tasks
 
 logger = logging.getLogger(__name__)

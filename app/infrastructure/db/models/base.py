@@ -19,6 +19,10 @@ class BaseModel(SQLModel):
         description="Unique identifier"
     )
 
+class AuditMixin(SQLModel):
+    created_by: Optional[str] = Field(default=None, foreign_key="users.id")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.id")
+
 
 class TimestampMixin(SQLModel):
     """
@@ -44,6 +48,11 @@ class TimestampMixin(SQLModel):
         description="Record last update timestamp"
     )
 
+class SoftDeleteMixin:
+    """Mixin for soft delete functionality"""
+    is_deleted: bool = Field(default=False)
+    deleted_at: Optional[datetime] = Field(default=None)
+    deleted_by: Optional[str] = Field(default=None, foreign_key="users.id")
 
 class BaseModelWithTimestamp(BaseModel, TimestampMixin):
     """

@@ -4,6 +4,7 @@ psycopg2==2.9.10
 pydantic==2.11.4
 SQLAlchemy==2.0.41
 uvicorn==0.34.2
+jwt==1.4.0
 
 # Database
 sqlmodel==0.0.14
@@ -20,10 +21,16 @@ python-multipart==0.0.6
 redis==6.1.0
 aioredis==2.0.1
 
+# File processing
+pandas==2.1.3
+openpyxl==3.1.2
+xlrd==2.0.1
+lxml==4.9.3
 
 # File handling
 python-magic==0.4.27
 pillow==10.1.0
+aiofiles==23.2.1    
 
 # Background tasks
 celery==5.3.4

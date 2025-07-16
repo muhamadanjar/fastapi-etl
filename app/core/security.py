@@ -121,16 +121,16 @@ def create_access_token(
     
     # Set expiration time
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
+        expire = datetime.now() + timedelta(
             minutes=settings.security.access_token_expire_minutes
         )
     
     # Add standard claims
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(),
         "token_type": "access",
         "scopes": scopes or [],
     })
@@ -169,13 +169,13 @@ def create_refresh_token(
         expire = datetime.now() + expires_delta
     else:
         expire = datetime.now() + timedelta(
-            minutes=settings.security.refresh_token_expire_minutes
+            days=settings.security.refresh_token_expire_minutes
         )
     
     # Add standard claims
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(),
         "token_type": "refresh",
     })
     
