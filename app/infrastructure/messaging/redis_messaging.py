@@ -63,11 +63,11 @@ class RedisMessaging(MessageInterface, MessageBrokerInterface):
         """
         settings = get_settings()
         
-        self.url = url or getattr(settings, 'REDIS_URL', None)
-        self.host = host or getattr(settings, 'REDIS_HOST', 'localhost')
-        self.port = port or getattr(settings, 'REDIS_PORT', 6379)
-        self.password = password or getattr(settings, 'REDIS_PASSWORD', None)
-        self.db = db or getattr(settings, 'REDIS_DB', 0)
+        self.url = url or settings.redis_settings.url 
+        self.host = host or settings.redis_settings.localhost
+        self.port = port or settings.redis_settings.port
+        self.password = password or settings.redis_settings.password
+        self.db = db or settings.redis_settings.db
         self.max_connections = max_connections or 10
         self.message_ttl = message_ttl
         self.enable_persistence = enable_persistence

@@ -73,12 +73,12 @@ class RabbitMQMessaging(MessageInterface, MessageBrokerInterface):
         """
         settings = get_settings()
         
-        self.url = url or getattr(settings, 'RABBITMQ_URL', None)
-        self.host = host or getattr(settings, 'RABBITMQ_HOST', 'localhost')
-        self.port = port or getattr(settings, 'RABBITMQ_PORT', 5672)
-        self.username = username or getattr(settings, 'RABBITMQ_USERNAME', 'guest')
-        self.password = password or getattr(settings, 'RABBITMQ_PASSWORD', 'guest')
-        self.virtual_host = virtual_host or getattr(settings, 'RABBITMQ_VHOST', '/')
+        self.url = url or settings.rabbitmq_settings.url
+        self.host = host or settings.rabbitmq_settings.host 
+        self.port = port or settings.rabbitmq_settings.port
+        self.username = username or settings.rabbitmq_settings.user
+        self.password = password or settings.rabbitmq_settings.password
+        self.virtual_host = virtual_host or settings.rabbitmq_settings.vhost
         
         self.exchange_name = exchange_name
         self.exchange_type = exchange_type

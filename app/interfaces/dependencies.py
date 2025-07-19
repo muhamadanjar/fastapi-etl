@@ -25,8 +25,8 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            settings.security.secret_key,
+            algorithms=[settings.security.algorithm]
         )
         user_id: str = payload.get("sub")
         if user_id is None:

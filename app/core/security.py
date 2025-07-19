@@ -124,7 +124,7 @@ def create_access_token(
         expire = datetime.now() + expires_delta
     else:
         expire = datetime.now() + timedelta(
-            minutes=settings.security.access_token_expire_minutes
+            minutes=settings.security.access_token_expire
         )
     
     # Add standard claims

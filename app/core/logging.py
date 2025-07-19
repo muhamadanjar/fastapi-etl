@@ -143,16 +143,16 @@ def setup_logging() -> None:
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("fastapi").setLevel(logging.INFO)
-    logging.getLogger("sqlalchemy.engine").setLevel(
-        logging.INFO if settings.database.echo else logging.WARNING
-    )
+    # logging.getLogger("sqlalchemy.engine").setLevel(
+    #     logging.INFO if settings.database.echo else logging.WARNING
+    # )
     
     # Suppress noisy loggers in production
-    if settings.is_production:
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-        logging.getLogger("requests").setLevel(logging.WARNING)
-        logging.getLogger("boto3").setLevel(logging.WARNING)
-        logging.getLogger("botocore").setLevel(logging.WARNING)
+    # if settings.is_production:
+    #     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    #     logging.getLogger("requests").setLevel(logging.WARNING)
+    #     logging.getLogger("boto3").setLevel(logging.WARNING)
+    #     logging.getLogger("botocore").setLevel(logging.WARNING)
 
 
 def get_logger(name: str, context: Optional[Dict[str, Any]] = None) -> logging.Logger:

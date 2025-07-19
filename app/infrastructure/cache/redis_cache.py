@@ -70,16 +70,16 @@ class RedisCache(CacheInterface):
         settings = get_settings()
         
         # Connection parameters
-        self.url = url or getattr(settings, 'REDIS_URL', None)
-        self.host = host or getattr(settings, 'REDIS_HOST', 'localhost')
-        self.port = port or getattr(settings, 'REDIS_PORT', 6379)
-        self.password = password or getattr(settings, 'REDIS_PASSWORD', None)
-        self.db = db or getattr(settings, 'REDIS_DB', 0)
-        self.max_connections = max_connections or getattr(settings, 'REDIS_POOL_SIZE', 10)
+        self.url = url or settings.redis_settings.url 
+        self.host = host or settings.redis_settings.host 
+        self.port = port or settings.redis_settings.port 
+        self.password = password or settings.redis_settings.password 
+        self.db = db or settings.redis_settings.db 
+        self.max_connections = max_connections or 10
         
         # Connection behavior
         self.retry_on_timeout = retry_on_timeout
-        self.socket_timeout = socket_timeout or getattr(settings, 'REDIS_TIMEOUT', 5.0)
+        self.socket_timeout = socket_timeout or 5.0
         self.socket_connect_timeout = socket_connect_timeout or 5.0
         self.health_check_interval = health_check_interval
         

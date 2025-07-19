@@ -19,7 +19,8 @@ from app.infrastructure.messaging.decorators import message_handler, publish_eve
 from app.infrastructure.messaging.manager import MessagingType
 from app.interfaces.http.routes import (
     auth as auth_routes,
-    users as user_routes,
+    files as file_routes,
+    # users as user_routes,
 )
 
 import uvicorn
@@ -71,6 +72,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             )
             print("✅ Cache system initialized (Redis + Memory fallback)")
 
+            await database_manager.connect()
+            print("✅ Database connection established")
+
             setup_logging()
             
         except Exception as e:
@@ -101,6 +105,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Shutdown Redis
         await redis_manager.disconnect()
         print("✅ Redis disconnected")
+
+        await database_manager.disconnect()
+        print("✅ Database connection closed")
 
 def create_application() -> FastAPI:
     settings = get_settings()

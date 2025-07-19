@@ -28,7 +28,7 @@ services:
 
   celery_worker:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/etl_db

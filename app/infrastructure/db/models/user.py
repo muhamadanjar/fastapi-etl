@@ -41,7 +41,7 @@ class User(UserBase, BaseModelWithTimestamp, table=True):
     
     __tablename__ = "users"
     
-    hashed_password: str = Field(
+    password: str = Field(
         sa_column=Column(String(255), nullable=False),
         description="Hashed password"
     )
