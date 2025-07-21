@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from sqlmodel import SQLModel, Field, Relationship
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class RuleType(str, Enum):

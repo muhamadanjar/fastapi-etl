@@ -11,7 +11,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from app.services.base import BaseService
 from app.core.exceptions import AuthenticationError, ServiceError
-from app.core.constants import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from app.core.constants import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE
 from app.utils.security import verify_password, create_access_token
 
 
@@ -90,7 +90,7 @@ class AuthService(BaseService):
                 "sub": user_data["username"],
                 "user_id": user_data["user_id"],
                 "roles": user_data.get("roles", []),
-                "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+                "exp": datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE)
             }
             
             return create_access_token(token_data)

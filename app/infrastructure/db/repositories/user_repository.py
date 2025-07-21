@@ -6,10 +6,10 @@ from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload
 
 from .base import BaseRepository
-from ..models.user_model import User, UserProfile
+from ..models.auth import User, UserProfile
 from ....core.exceptions import DatabaseError
 from ....domain.repositories.user_repository import UserRepositoryInterface
-from ....domain.entities.user import User as UserEntity, UserProfile as UserProfileEntity
+from ....infrastructure.db.models import User as UserEntity, UserProfile as UserProfileEntity
 from ....domain.value_objects.email import Email
 
 logger = logging.getLogger(__name__)

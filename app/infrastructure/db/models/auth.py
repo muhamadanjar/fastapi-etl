@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import EmailStr
 
+from app.infrastructure.db.models.base import BaseModel
+
 
 class UserBase(SQLModel):
     """User base model"""
@@ -58,3 +60,11 @@ class TokenData(SQLModel):
     """Token data model"""
     user_id: Optional[str] = None
     username: Optional[str] = None
+
+
+class UserProfile(BaseModel):
+    """User profile model"""
+    user_id: str = Field(foreign_key="users.id", primary_key=True)
+    bio: Optional[str] = None
+    profile_picture: Optional[str] = None
+    # user: User = Relationship(back_populates="profile")

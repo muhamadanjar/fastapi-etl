@@ -169,7 +169,7 @@ def create_refresh_token(
         expire = datetime.now() + expires_delta
     else:
         expire = datetime.now() + timedelta(
-            days=settings.security.refresh_token_expire_minutes
+            days=settings.security.refresh_token_expire
         )
     
     # Add standard claims

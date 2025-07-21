@@ -2,7 +2,7 @@ import os
 from typing import List, Optional
 from pydantic import EmailStr, Field, field_validator
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CORSSettings(BaseSettings):
@@ -154,12 +154,13 @@ class Settings(BaseSettings):
     default_page_size: int = Field(default=10, env="DEFAULT_PAGE_SIZE")
     max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
+    model_config = SettingsConfigDict(env_file=".env", extra="allow", env_file_encoding="utf-8")
     
 
-    class Config:
-        extra = "allow"
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # class Config:
+    #     extra = "allow"
+    #     env_file = ".env"
+    #     env_file_encoding = "utf-8"
 
 settings = Settings()
 

@@ -24,10 +24,10 @@ logger = get_logger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
-JWT_SECRET_KEY = getattr(settings, 'JWT_SECRET_KEY', 'your-secret-key-here')
-JWT_ALGORITHM = getattr(settings, 'JWT_ALGORITHM', 'HS256')
-ACCESS_TOKEN_EXPIRE_MINUTES = getattr(settings, 'ACCESS_TOKEN_EXPIRE_MINUTES', 30)
-REFRESH_TOKEN_EXPIRE_DAYS = getattr(settings, 'REFRESH_TOKEN_EXPIRE_DAYS', 7)
+JWT_SECRET_KEY = settings.security.secret_key
+JWT_ALGORITHM = settings.security.algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.security.access_token_expire
+REFRESH_TOKEN_EXPIRE_DAYS = settings.security.refresh_token_expire
 
 
 def hash_password(password: str) -> str:
