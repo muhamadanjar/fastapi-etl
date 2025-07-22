@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 from app.core.enums import ProcessingStatus, FileTypeEnum
 
 
@@ -60,7 +60,7 @@ class FileRegistry(BaseModel, table=True):
         description="Batch identifier for grouping related files"
     )
     
-    metadata: Optional[Dict[str, Any]] = Field(
+    file_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSON),
         description="Additional metadata about the file in JSON format"
@@ -95,7 +95,7 @@ class FileRegistryCreate(SQLModel):
     source_system: Optional[str] = Field(default=None, max_length=100)
     batch_id: Optional[str] = Field(default=None, max_length=50)
     created_by: Optional[str] = Field(default=None, max_length=100)
-    metadata: Optional[Dict[str, Any]] = None
+    file_metadata: Optional[Dict[str, Any]] = None
 
 
 class FileRegistryUpdate(SQLModel):
@@ -108,7 +108,7 @@ class FileRegistryUpdate(SQLModel):
     processing_status: Optional[ProcessingStatus] = None
     batch_id: Optional[str] = Field(default=None, max_length=50)
     created_by: Optional[str] = Field(default=None, max_length=100)
-    metadata: Optional[Dict[str, Any]] = None
+    file_metadata: Optional[Dict[str, Any]] = None
 
 
 class FileRegistryRead(SQLModel):

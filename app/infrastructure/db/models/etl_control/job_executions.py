@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -20,7 +21,7 @@ class ExecutionStatus(str, Enum):
 
 class JobExecutionBase(BaseModel):
     """Base model untuk JobExecution dengan field-field umum"""
-    job_id: str = Field(foreign_key="etl_control.etl_jobs.id", index=True)
+    job_id: UUID = Field(foreign_key="etl_control.etl_jobs.id", index=True)
     batch_id: Optional[str] = Field(default=None, max_length=50, index=True)
     start_time: Optional[datetime] = Field(default=None)
     end_time: Optional[datetime] = Field(default=None)

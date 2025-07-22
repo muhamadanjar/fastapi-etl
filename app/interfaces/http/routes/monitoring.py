@@ -1,18 +1,24 @@
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
 from app.interfaces.dependencies import get_db, get_current_user
+from app.infrastructure.db.connection import (
+    database_manager,
+    get_session_dependency,
+    get_async_session_dependency
+)
 from app.services.monitoring_service import MonitoringService
-from app.infrastructure.db.models.user import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 
 @router.get("/dashboard")
 async def get_dashboard_data(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session_dependency)
 ) -> Dict[str, Any]:
     """Get dashboard overview data"""
     monitoring_service = MonitoringService(db)

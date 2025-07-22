@@ -5,10 +5,10 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 
-from app.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.response_schemas import ReportResponse, ReportRequest
 from app.services.report_service import ReportService
-from app.models.base import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 

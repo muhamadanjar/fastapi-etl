@@ -12,8 +12,8 @@ from app.core.config import settings
 # Create Celery instance
 celery_app = Celery(
     "etl_worker",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=settings.celery_settings.broker_url,
+    backend=settings.celery_settings.result_backend,
     include=[
         'app.tasks.etl_tasks',
         'app.tasks.monitoring_tasks', 
@@ -62,7 +62,7 @@ celery_app.conf.update(
     
     # Task acknowledgment
     task_acks_late=True,  # Acknowledge tasks after completion
-    worker_prefetch_multiplier=1,
+    # worker_prefetch_multiplier=1,
     
     # Task retry settings
     task_reject_on_worker_lost=True,
@@ -98,7 +98,7 @@ celery_app.conf.update(
     
     # Task compression
     task_compression='gzip',
-    result_compression='gzip',
+    # result_compression='gzip',
     
     # Beat schedule for periodic tasks
     beat_schedule={
@@ -195,7 +195,7 @@ celery_app.conf.update(
     },
     
     # Beat scheduler settings
-    beat_scheduler='django_celery_beat.schedulers:DatabaseScheduler' if settings.USE_DJANGO_CELERY_BEAT else 'celery.beat:PersistentScheduler',
+    # beat_scheduler='django_celery_beat.schedulers:DatabaseScheduler' if settings.USE_DJANGO_CELERY_BEAT else 'celery.beat:PersistentScheduler',
     beat_schedule_filename='celerybeat-schedule',
     
     # Error handling
@@ -362,10 +362,10 @@ def validate_celery_config():
     """Validate Celery configuration"""
     errors = []
     
-    if not settings.CELERY_BROKER_URL:
+    if not settings.celery_settings.broker_url:
         errors.append("CELERY_BROKER_URL is not configured")
     
-    if not settings.CELERY_RESULT_BACKEND:
+    if not settings.celery_settings.result_backend:
         errors.append("CELERY_RESULT_BACKEND is not configured")
     
     # Test broker connection

@@ -23,9 +23,9 @@ from .utils import (
     CacheKeyBuilder,
     serialize_cache_args,
     get_cache_namespace,
-    get_cache_stats_summary,
-    warm_cache,
-    CacheMetrics,
+    # get_cache_stats_summary,
+    # warm_cache,
+    # CacheMetrics,
 )
 
 # Version info
@@ -59,9 +59,9 @@ __all__ = [
     "CacheKeyBuilder", 
     "serialize_cache_args",
     "get_cache_namespace",
-    "get_cache_stats_summary",
-    "warm_cache",
-    "CacheMetrics",
+    # "get_cache_stats_summary",
+    # "warm_cache",
+    # "CacheMetrics",
 ]
 
 

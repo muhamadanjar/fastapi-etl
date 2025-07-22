@@ -19,8 +19,7 @@ from app.infrastructure.messaging.decorators import message_handler, publish_eve
 from app.infrastructure.messaging.manager import MessagingType
 from app.interfaces.http.routes import (
     auth as auth_routes,
-    files as file_routes,
-    # users as user_routes,
+    files as file_routes
 )
 
 import uvicorn
@@ -218,22 +217,22 @@ def create_application() -> FastAPI:
 
 
     # Include routers
-    app.include_router(
-        auth_routes.router,
-        prefix="/api/v1/auth",
-        tags=["Authentication"]
-    )
+    # app.include_router(
+    #     auth_routes.router,
+    #     prefix="/api/v1/auth",
+    #     tags=["Authentication"]
+    # )
     
-    app.include_router(
-        user_routes.router,
-        prefix="/api/v1/users",
-        tags=["Users"]
-    )
+    # app.include_router(
+    #     user_routes.router,
+    #     prefix="/api/v1/users",
+    #     tags=["Users"]
+    # )
 
-    @app.websocket("/ws/{client_id}")
-    async def websocket_endpoint(websocket, client_id: str):
-        """WebSocket connection endpoint."""
-        await websocket_manager.connect(websocket, client_id)
+    # @app.websocket("/ws/{client_id}")
+    # async def websocket_endpoint(websocket, client_id: str):
+    #     """WebSocket connection endpoint."""
+    #     await websocket_manager.connect(websocket, client_id)
     
     # Root endpoint
     @app.get("/")

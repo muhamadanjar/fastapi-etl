@@ -15,7 +15,7 @@ from .base import (
     MessagePublisher,
 )
 from .redis_messaging import RedisMessaging, redis_messaging_manager
-from .websocket_messaging import WebSocketMessaging, websocket_manager
+from .websocket_messaging import WebSocketMessaging #, websocket_manager
 from .sse_messaging import SSEMessaging, sse_manager
 from .manager import MessagingManager, messaging_manager
 from .decorators import (

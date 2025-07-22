@@ -3,10 +3,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from typing import Dict, Any
 
-from app.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.auth import UserCreate, UserResponse, Token, ChangePassword
 from app.services.auth_service import AuthService
-from app.models.base import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 

@@ -13,8 +13,8 @@ from uuid import UUID
 from sqlmodel import SQLModel
 
 from .connection import get_session
-from .repository import Repository, UserRepository
-from .models.user import User, UserCreate, UserUpdate
+from .repositories import BaseRepository, UserRepository
+from .models.auth import User, UserCreate, UserUpdate
 from ...core.exceptions import DatabaseError
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class DatabaseService:
             Repository instance
         """
         with get_session() as session:
-            yield Repository(session, model)
+            yield BaseRepository(session, model)
     
     @contextmanager
     def get_user_repository(self):

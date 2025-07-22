@@ -50,6 +50,17 @@ class QualityResultEnum(str, Enum):
     FAIL = "FAIL"
     WARNING = "WARNING"
     
+class JobStatus(str, Enum):
+    """Job status for ETL jobs."""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+class JobType(str, Enum):
+    """Job types for ETL jobs."""
+    EXTRACT = "EXTRACT" 
 
 
 class EntityType(str, Enum):

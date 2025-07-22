@@ -10,7 +10,7 @@ from sqlalchemy import select
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from app.services.base import BaseService
-from app.core.exceptions import AuthenticationError, ServiceError
+from app.core.exceptions import ServiceError, UnauthorizedError
 from app.core.constants import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE
 from app.utils.security import verify_password, create_access_token
 
@@ -106,7 +106,7 @@ class AuthService(BaseService):
             user_id = payload.get("user_id")
             
             if username is None or user_id is None:
-                raise AuthenticationError("Invalid token")
+                raise UnauthorizedError("Invalid token")
             
             return {
                 "username": username,
@@ -115,7 +115,7 @@ class AuthService(BaseService):
             }
             
         except JWTError as e:
-            raise AuthenticationError("Invalid token") from e
+            raise UnauthorizedError("Invalid token") from e
     
     async def refresh_token(self, refresh_token: str) -> str:
         """Refresh access token using refresh token."""
@@ -125,12 +125,12 @@ class AuthService(BaseService):
             username = payload.get("sub")
             
             if username is None:
-                raise AuthenticationError("Invalid refresh token")
+                raise UnauthorizedError("Invalid refresh token")
             
             # Get user data
             user = await self._get_user_by_username(username)
             if not user or not user.is_active:
-                raise AuthenticationError("User not found or inactive")
+                raise UnauthorizedError("User not found or inactive")
             
             # Generate new access token
             user_data = {
@@ -142,7 +142,7 @@ class AuthService(BaseService):
             return await self.generate_access_token(user_data)
             
         except JWTError as e:
-            raise AuthenticationError("Invalid refresh token") from e
+            raise UnauthorizedError("Invalid refresh token") from e
     
     async def change_password(self, user_id: int, old_password: str, new_password: str) -> bool:
         """Change user password."""

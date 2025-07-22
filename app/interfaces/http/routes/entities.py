@@ -3,13 +3,13 @@ from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from app.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.entity_schemas import (
     EntityCreate, EntityUpdate, EntityResponse, EntityRelationshipResponse,
     EntitySearchRequest, EntityMergeRequest
 )
 from app.services.entity_service import EntityService
-from app.models.base import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 

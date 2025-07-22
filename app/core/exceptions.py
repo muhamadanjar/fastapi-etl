@@ -162,6 +162,75 @@ class BadRequestError(AppException):
         )
 
 
+class MessagingError(AppException):
+    """Exception raised for bad requests."""
+    
+    def __init__(
+        self,
+        message: str = "Message Error",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="MESSAGE_ERROR",
+            details=details,
+            status_code=400,
+        )
+
+
+class FileError(AppException):
+    """Exception raised for bad requests."""
+    
+    def __init__(
+        self,
+        message: str = "Message Error",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="FILE_ERROR",
+            details=details,
+            status_code=400,
+        )
+
+class FileProcessingException(AppException):
+    """Exception raised for file processing errors."""
+    
+    def __init__(
+        self,
+        message: str = "File processing error",
+        file_path: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.file_path = file_path
+        
+        exception_details = details or {}
+        if file_path:
+            exception_details["file_path"] = file_path
+        
+        super().__init__(
+            message=message,
+            error_code="FILE_PROCESSING_ERROR",
+            details=exception_details,
+            status_code=500,
+        )
+
+class ServiceError(AppException):
+    """Exception raised for bad requests."""
+    
+    def __init__(
+        self,
+        message: str = "Message Error",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="SERVICE_ERROR",
+            details=details,
+            status_code=400,
+        )
+
+
 class InternalServerError(AppException):
     """Exception raised for internal server errors."""
     
@@ -336,7 +405,27 @@ class EmailError(AppException):
             details=exception_details,
             status_code=500,
         )
-
+class ETLError(AppException):
+    """Exception raised for ETL-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "ETL error occurred",
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.operation = operation
+        
+        exception_details = details or {}
+        if operation:
+            exception_details["operation"] = operation
+        
+        super().__init__(
+            message=message,
+            error_code="ETL_ERROR",
+            details=exception_details,
+            status_code=500,
+        )
 
 class FileStorageError(AppException):
     """Exception raised for file storage-related errors."""

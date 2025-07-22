@@ -4,13 +4,13 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 
-from app.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.job_schemas import (
     JobCreate, JobUpdate, JobResponse, JobExecutionResponse, 
     JobScheduleCreate, JobConfigUpdate
 )
 from app.services.etl_service import ETLService
-from app.models.base import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 

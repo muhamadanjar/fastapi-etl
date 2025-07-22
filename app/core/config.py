@@ -135,6 +135,7 @@ class LoggingSettings(BaseSettings):
 
 
 class Settings(BaseSettings):
+    ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     redis_url: Optional[str] = Field(env="REDIS_URL", default=None)
     database_url: str = Field(default="postgresql://user:password@db:5432/etl_db", env="DATABASE_URL")
     
@@ -155,6 +156,7 @@ class Settings(BaseSettings):
     max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
     model_config = SettingsConfigDict(env_file=".env", extra="allow", env_file_encoding="utf-8")
+
     
 
     # class Config:

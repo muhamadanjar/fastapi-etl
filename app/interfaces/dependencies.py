@@ -3,8 +3,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import jwt
+from sqlmodel import Session
 
-from app.core.database import get_async_session
+from app.core.database import get_session
 from app.core.config import settings
 from app.services.auth_service import AuthService
 from app.infrastructure.db.models.auth import User
@@ -12,9 +13,9 @@ from app.infrastructure.db.models.auth import User
 # Security
 security = HTTPBearer()
 
-async def get_db() -> AsyncSession:
+async def get_db() -> Session:
     """Database dependency"""
-    async for session in get_async_session():
+    async for session in get_session():
         yield session
 
 async def get_current_user(
