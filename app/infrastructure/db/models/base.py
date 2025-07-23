@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, func, text
 
 
 class BaseModel(SQLModel):
@@ -13,6 +13,9 @@ class BaseModel(SQLModel):
     
     id: UUID = Field(
         default_factory=uuid4,
+        sa_column_kwargs={
+            "server_default": text("gen_random_uuid()")  # atau uuid_generate_v4()
+        },
         primary_key=True,
         index=True,
         nullable=False,
@@ -20,8 +23,8 @@ class BaseModel(SQLModel):
     )
 
 class AuditMixin(SQLModel):
-    created_by: Optional[str] = Field(default=None, foreign_key="users.id")
-    updated_by: Optional[str] = Field(default=None, foreign_key="users.id")
+    created_by: Optional[UUID] = Field(default=None, foreign_key="users.id")
+    updated_by: Optional[UUID] = Field(default=None, foreign_key="users.id")
 
 
 class TimestampMixin(SQLModel):
@@ -31,20 +34,19 @@ class TimestampMixin(SQLModel):
     
     created_at: datetime = Field(
         default_factory=datetime.utcnow,
-        sa_column=Column(
-            DateTime(timezone=True),
-            server_default=func.now(),
-            nullable=False
-        ),
+        sa_column_kwargs={
+            "server_default": func.now(),
+            "nullable": False,
+        },
         description="Record creation timestamp"
     )
-    
+
     updated_at: Optional[datetime] = Field(
         default=None,
-        sa_column=Column(
-            DateTime(timezone=True),
-            onupdate=func.now()
-        ),
+        sa_column_kwargs={
+            "onupdate": func.now(),
+            "nullable": True,
+        },
         description="Record last update timestamp"
     )
 
@@ -52,7 +54,7 @@ class SoftDeleteMixin:
     """Mixin for soft delete functionality"""
     is_deleted: bool = Field(default=False)
     deleted_at: Optional[datetime] = Field(default=None)
-    deleted_by: Optional[str] = Field(default=None, foreign_key="users.id")
+    deleted_by: Optional[UUID] = Field(default=None, foreign_key="users.id")
 
 class BaseModelWithTimestamp(BaseModel, TimestampMixin):
     """

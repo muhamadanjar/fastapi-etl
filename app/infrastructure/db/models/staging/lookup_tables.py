@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 
 from sqlmodel import SQLModel, Field
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel, TimestampMixin
 
 
 class LookupTableBase(BaseModel):
@@ -15,18 +15,15 @@ class LookupTableBase(BaseModel):
     is_active: bool = Field(default=True, index=True)
 
 
-class LookupTable(LookupTableBase, table=True):
+class LookupTable(LookupTableBase,TimestampMixin, table=True):
     """Model untuk tabel staging.lookup_tables"""
     __tablename__ = "lookup_tables"
     __table_args__ = (
         {"schema": "staging"},
     )
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "lookup_name": "country_codes",
                 "lookup_key": "US",

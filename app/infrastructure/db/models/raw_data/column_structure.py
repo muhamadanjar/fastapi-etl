@@ -4,6 +4,7 @@ Column Structure model for storing detected column metadata
 
 from datetime import datetime
 from typing import Optional, List
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Column, ARRAY, String, ForeignKey
 
 from app.core.enums import DataType
@@ -19,7 +20,7 @@ class ColumnStructure(BaseModel, table=True):
     __table_args__ = {"schema": "raw_data"}
     
     
-    file_id: str = Field(
+    file_id: UUID = Field(
         foreign_key="raw_data.file_registry.id",
         description="Reference to the source file"
     )

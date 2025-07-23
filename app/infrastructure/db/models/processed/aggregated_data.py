@@ -1,13 +1,14 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel, TimestampMixin
 
 
-class AggregatedDataBase(BaseModel):
+class AggregatedDataBase(BaseModel, TimestampMixin):
     """Base model untuk AggregatedData dengan field-field umum"""
     aggregation_name: str = Field(max_length=100, index=True)
     aggregation_type: str = Field(max_length=50, index=True)  # 'SUM', 'COUNT', 'AVG', 'GROUP_BY'
@@ -17,14 +18,13 @@ class AggregatedDataBase(BaseModel):
     batch_id: Optional[str] = Field(default=None, max_length=50, index=True)
 
 
-class AggregatedData(AggregatedDataBase, table=True):
+class AggregatedData(AggregatedDataBase,table=True):
     """Model untuk tabel processed.aggregated_data"""
     __tablename__ = "aggregated_data"
     __table_args__ = (
         {"schema": "processed"},
     )
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
         schema_extra = {
@@ -67,7 +67,7 @@ class AggregatedDataUpdate(SQLModel):
 
 class AggregatedDataRead(AggregatedDataBase):
     """Schema untuk read aggregated data"""
-    aggregation_id: int
+    aggregation_id: UUID
     created_at: datetime
 
 
@@ -90,3 +90,4 @@ class AggregatedDataSummary(SQLModel):
     latest_batch: Optional[str] = Field(default=None)
     latest_update: Optional[datetime] = Field(default=None)
     time_periods: Optional[list] = Field(default=None)
+    

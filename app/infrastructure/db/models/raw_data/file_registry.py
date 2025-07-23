@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -11,12 +12,6 @@ class FileRegistry(BaseModel, table=True):
     """
     __tablename__ = "file_registry"
     __table_args__ = {"schema": "raw_data"}
-    
-    file_id: Optional[int] = Field(
-        default=None, 
-        primary_key=True,
-        description="Unique identifier for the file"
-    )
     
     file_name: str = Field(
         max_length=255,
@@ -67,7 +62,7 @@ class FileRegistry(BaseModel, table=True):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "file_name": "sales_data_2024.csv",
                 "file_path": "/storage/uploads/sales_data_2024.csv",
@@ -113,7 +108,7 @@ class FileRegistryUpdate(SQLModel):
 
 class FileRegistryRead(SQLModel):
     """Schema for reading file registry data"""
-    file_id: int
+    file_id: UUID
     file_name: str
     file_path: Optional[str]
     file_type: FileTypeEnum
@@ -123,5 +118,5 @@ class FileRegistryRead(SQLModel):
     processing_status: ProcessingStatus
     batch_id: Optional[str]
     created_by: Optional[str]
-    metadata: Optional[Dict[str, Any]]
+    file_metadata: Optional[Dict[str, Any]]
     created_at: datetime

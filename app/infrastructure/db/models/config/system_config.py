@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from sqlmodel import SQLModel, Field
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class SystemConfigBase(BaseModel):
@@ -35,7 +36,7 @@ class SystemConfigCreate(SystemConfigBase):
 
 class SystemConfigRead(SystemConfigBase):
     """Schema for reading system configuration."""
-    config_id: str
+    config_id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -49,3 +50,4 @@ class SystemConfigUpdate(SQLModel):
     description: Optional[str] = Field(default=None)
     is_encrypted: Optional[bool] = Field(default=None)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    

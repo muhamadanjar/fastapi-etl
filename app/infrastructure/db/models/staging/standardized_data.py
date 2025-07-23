@@ -1,17 +1,18 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from decimal import Decimal
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import ARRAY, String, text
 from sqlalchemy.dialects.postgresql import JSONB
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class StandardizedDataBase(BaseModel):
     """Base model untuk StandardizedData dengan field-field umum"""
-    source_file_id: str = Field(foreign_key="raw_data.file_registry.id", index=True)
-    source_record_id: str = Field(foreign_key="raw_data.raw_records.id", index=True)
+    source_file_id: UUID = Field(foreign_key="raw_data.file_registry.id", index=True)
+    source_record_id: UUID = Field(foreign_key="raw_data.raw_records.id", index=True)
     entity_type: str = Field(max_length=100, index=True)  # 'PERSON', 'PRODUCT', 'TRANSACTION', 'EVENT'
     standardized_data: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
     quality_score: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)

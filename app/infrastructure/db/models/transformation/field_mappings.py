@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class FieldMappingBase(BaseModel):

@@ -24,6 +24,9 @@ from app.interfaces.http.routes import (
 
 import uvicorn
 
+
+settings = get_settings()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
@@ -109,7 +112,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         print("✅ Database connection closed")
 
 def create_application() -> FastAPI:
-    settings = get_settings()
     app = FastAPI(
         title=settings.PROJECT_NAME,
         description="FastAPI Clean Architecture Starter",

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from decimal import Decimal
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Relationship
 
@@ -74,7 +75,7 @@ class QualityRuleUpdate(SQLModel):
 
 class QualityRuleRead(QualityRuleBase):
     """Schema untuk read quality rule"""
-    rule_id: int
+    rule_id: UUID
     created_at: datetime
 
 

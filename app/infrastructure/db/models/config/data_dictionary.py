@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Optional, List
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import ARRAY, String
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel, TimestampMixin
 
 
 class DataDictionaryBase(BaseModel):
@@ -20,12 +21,11 @@ class DataDictionaryBase(BaseModel):
     )
 
 
-class DataDictionary(DataDictionaryBase, table=True):
+class DataDictionary(DataDictionaryBase, TimestampMixin, table=True):
     """Data dictionary model for database storage."""
     __tablename__ = "data_dictionary"
     __table_args__ = {"schema": "config"}
     
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
 
 
 class DataDictionaryCreate(DataDictionaryBase):
@@ -35,7 +35,7 @@ class DataDictionaryCreate(DataDictionaryBase):
 
 class DataDictionaryRead(DataDictionaryBase):
     """Schema for reading data dictionary entries."""
-    dict_id: int
+    dict_id: UUID
     created_at: datetime
 
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 from sqlmodel import SQLModel, Field, JSON, Column
 from sqlalchemy import ARRAY, Integer, text
 from sqlalchemy.dialects.postgresql import JSONB

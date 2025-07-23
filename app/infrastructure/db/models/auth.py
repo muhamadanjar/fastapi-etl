@@ -64,7 +64,7 @@ class TokenData(SQLModel):
 
 class UserProfile(BaseModel):
     """User profile model"""
-    user_id: str = Field(foreign_key="users.id", primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="users.id", primary_key=True)
     bio: Optional[str] = None
     profile_picture: Optional[str] = None
     # user: User = Relationship(back_populates="profile")

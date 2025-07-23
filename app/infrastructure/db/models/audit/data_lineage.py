@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Relationship
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel, TimestampMixin
 
 
 class DataLineageBase(BaseModel):
@@ -12,9 +13,9 @@ class DataLineageBase(BaseModel):
     target_entity: Optional[str] = Field(default=None, max_length=100, description="Target entity name")
     target_field: Optional[str] = Field(default=None, max_length=100, description="Target field name")
     transformation_applied: Optional[str] = Field(default=None, description="Transformation logic applied")
-    execution_id: Optional[int] = Field(
+    execution_id: Optional[UUID] = Field(
         default=None, 
-        foreign_key="etl_control.job_executions.execution_id",
+        foreign_key="etl_control.job_executions.id",
         description="Reference to job execution"
     )
 
@@ -24,7 +25,6 @@ class DataLineage(DataLineageBase, table=True):
     __tablename__ = "data_lineage"
     __table_args__ = {"schema": "audit"}
     
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
 
 
 class DataLineageCreate(DataLineageBase):
@@ -34,7 +34,7 @@ class DataLineageCreate(DataLineageBase):
 
 class DataLineageRead(DataLineageBase):
     """Schema for reading data lineage records."""
-    lineage_id: int
+    lineage_id: UUID
     created_at: datetime
 
 
@@ -45,4 +45,5 @@ class DataLineageUpdate(SQLModel):
     target_entity: Optional[str] = Field(default=None, max_length=100)
     target_field: Optional[str] = Field(default=None, max_length=100)
     transformation_applied: Optional[str] = Field(default=None)
-    execution_id: Optional[int] = Field(default=None)
+    execution_id: Optional[UUID] = Field(default=None)
+    

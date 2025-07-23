@@ -1,17 +1,18 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 from decimal import Decimal
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Relationship, Column
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class EntityRelationshipBase(BaseModel):
     """Base model untuk EntityRelationship dengan field-field umum"""
-    entity_from: int = Field(foreign_key="processed.entities.entity_id")
-    entity_to: int = Field(foreign_key="processed.entities.entity_id")
+    entity_from: UUID = Field(foreign_key="processed.entities.id")
+    entity_to: UUID = Field(foreign_key="processed.entities.id")
     relationship_type: str = Field(max_length=100)
     relationship_strength: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
@@ -24,15 +25,15 @@ class EntityRelationship(EntityRelationshipBase, table=True):
         {"schema": "processed"},
     )
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     
     # Relationships - akan digunakan jika diperlukan joins
     from_entity: Optional["Entity"] = Relationship(
-        foreign_keys=[entity_from],
+        foreign_keys=[EntityRelationshipBase.entity_from],
         sa_relationship_kwargs={"foreign_keys": "EntityRelationship.entity_from"}
     )
     to_entity: Optional["Entity"] = Relationship(
-        foreign_keys=[entity_to],
+        foreign_keys=[EntityRelationshipBase.entity_to],
         sa_relationship_kwargs={"foreign_keys": "EntityRelationship.entity_to"}
     )
     
@@ -60,8 +61,8 @@ class EntityRelationshipCreate(EntityRelationshipBase):
 
 class EntityRelationshipUpdate(SQLModel):
     """Schema untuk update entity relationship"""
-    entity_from: Optional[int] = Field(default=None)
-    entity_to: Optional[int] = Field(default=None)
+    entity_from: Optional[UUID] = Field(default=None)
+    entity_to: Optional[UUID] = Field(default=None)
     relationship_type: Optional[str] = Field(default=None, max_length=100)
     relationship_strength: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     metadata: Optional[Dict[str, Any]] = Field(default=None)
@@ -69,7 +70,7 @@ class EntityRelationshipUpdate(SQLModel):
 
 class EntityRelationshipRead(EntityRelationshipBase):
     """Schema untuk read entity relationship"""
-    relationship_id: int
+    relationship_id: UUID
     created_at: datetime
 
 

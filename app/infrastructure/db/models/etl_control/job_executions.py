@@ -45,6 +45,7 @@ class JobExecution(JobExecutionBase, table=True):
     
     # Relationships
     job: Optional["EtlJob"] = Relationship(back_populates="executions")
+    
     quality_check_results: List["QualityCheckResult"] = Relationship(back_populates="execution")
     
     class Config:

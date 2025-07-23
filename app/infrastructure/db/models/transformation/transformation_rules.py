@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, Column, JSON
 
-from app.models.base import BaseModel
+from app.infrastructure.db.models.base import BaseModel
 
 
 class TransformationRuleBase(BaseModel):

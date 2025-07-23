@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
+from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -17,8 +18,8 @@ class CheckResult(str, Enum):
 
 class QualityCheckResultBase(SQLModel):
     """Base model untuk QualityCheckResult dengan field-field umum"""
-    execution_id: int = Field(foreign_key="etl_control.job_executions.execution_id", index=True)
-    rule_id: int = Field(foreign_key="etl_control.quality_rules.rule_id", index=True)
+    execution_id: UUID = Field(foreign_key="etl_control.job_executions.id", index=True)
+    rule_id: UUID = Field(foreign_key="etl_control.quality_rules.id", index=True)
     check_result: CheckResult = Field(index=True)
     records_checked: Optional[int] = Field(default=0)
     records_passed: Optional[int] = Field(default=0)
@@ -34,9 +35,9 @@ class QualityCheckResult(QualityCheckResultBase, table=True):
     )
     
     check_id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    rule_id: str = Field(foreign_key="etl_control.quality_rules.id", index=True)
-    execution_id: str = Field(foreign_key="etl_control.job_executions.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+    rule_id: UUID = Field(foreign_key="etl_control.quality_rules.id", index=True)
+    execution_id: UUID = Field(foreign_key="etl_control.job_executions.id", index=True)
     
     # Relationships
     execution: Optional["JobExecution"] = Relationship(back_populates="quality_check_results")
@@ -92,7 +93,7 @@ class QualityCheckResultUpdate(SQLModel):
     records_passed: Optional[int] = Field(default=None)
     records_failed: Optional[int] = Field(default=None)
     failure_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
-    execution_id: Optional[int] = Field(default=None, foreign_key="etl_control.job_executions.execution_id")
+    execution_id: Optional[UUID] = Field(default=None, foreign_key="etl_control.job_executions.execution_id")
     rule_id: Optional[int] = Field(default=None, foreign_key="etl_control.quality_rules.rule_id")
     created_at: Optional[datetime] = Field(default=None)
     check_id: Optional[int] = Field(default=None, primary_key=True)

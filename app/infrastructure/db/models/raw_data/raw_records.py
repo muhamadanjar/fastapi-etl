@@ -1,13 +1,10 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from sqlmodel import UUID, SQLModel, Field, Column, JSON, ARRAY, String, ForeignKey
-
+from sqlmodel import SQLModel, Field, Column, JSON, ARRAY, String, ForeignKey
+from uuid import UUID
 from app.core.enums import ValidationStatus
 
 from ..base import BaseModel
-
-
-
 
 
 class RawRecords(BaseModel, table=True):
@@ -18,7 +15,7 @@ class RawRecords(BaseModel, table=True):
     __table_args__ = {"schema": "raw_data"}
     
     
-    file_id: int = Field(
+    file_id: UUID = Field(
         foreign_key="raw_data.file_registry.id",
         description="Reference to the source file"
     )
