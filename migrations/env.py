@@ -12,7 +12,7 @@ from app.infrastructure.db.models.config import *
 from app.infrastructure.db.models.raw_data import *
 from app.infrastructure.db.models.audit import *
 from app.infrastructure.db.models.etl_control import *
-# from app.infrastructure.db.models.processed import *
+from app.infrastructure.db.models.processed import *
 from app.infrastructure.db.models.staging import *
 from app.infrastructure.db.models.transformation import *
 

@@ -15,7 +15,7 @@ class EntityRelationshipBase(BaseModel):
     entity_to: UUID = Field(foreign_key="processed.entities.id")
     relationship_type: str = Field(max_length=100)
     relationship_strength: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
-    metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
+    relationship_metadata: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
 
 
 class EntityRelationship(EntityRelationshipBase, table=True):
@@ -29,12 +29,10 @@ class EntityRelationship(EntityRelationshipBase, table=True):
     
     # Relationships - akan digunakan jika diperlukan joins
     from_entity: Optional["Entity"] = Relationship(
-        foreign_keys=[EntityRelationshipBase.entity_from],
-        sa_relationship_kwargs={"foreign_keys": "EntityRelationship.entity_from"}
+        back_populates="relationships_from",
     )
     to_entity: Optional["Entity"] = Relationship(
-        foreign_keys=[EntityRelationshipBase.entity_to],
-        sa_relationship_kwargs={"foreign_keys": "EntityRelationship.entity_to"}
+        back_populates="relationships_to",
     )
     
     class Config:
@@ -44,7 +42,7 @@ class EntityRelationship(EntityRelationshipBase, table=True):
                 "entity_to": 2,
                 "relationship_type": "OWNS",
                 "relationship_strength": 0.85,
-                "metadata": {
+                "relationship_metadata": {
                     "relationship_context": "business_ownership",
                     "confidence_factors": ["document_evidence", "public_records"],
                     "source_documents": ["doc_001", "doc_002"],
@@ -65,7 +63,7 @@ class EntityRelationshipUpdate(SQLModel):
     entity_to: Optional[UUID] = Field(default=None)
     relationship_type: Optional[str] = Field(default=None, max_length=100)
     relationship_strength: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
-    metadata: Optional[Dict[str, Any]] = Field(default=None)
+    relationship_metadata: Optional[Dict[str, Any]] = Field(default=None)
 
 
 class EntityRelationshipRead(EntityRelationshipBase):

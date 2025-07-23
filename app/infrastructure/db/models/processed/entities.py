@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from app.infrastructure.db.models.base import BaseModel
-from sqlmodel import SQLModel, Field, JSON, Column
+from sqlmodel import SQLModel, Field, JSON, Column, Relationship
 from sqlalchemy import ARRAY, Integer, text
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -26,6 +26,13 @@ class Entity(EntityBase, table=True):
     )
     
     last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+    relationships_from: Optional[List["EntityRelationship"]] = Relationship(
+        back_populates="from_entity",
+    )
+    relationships_to: Optional[List["EntityRelationship"]] = Relationship(
+        back_populates="to_entity",
+    )
     
     class Config:
         schema_extra = {
