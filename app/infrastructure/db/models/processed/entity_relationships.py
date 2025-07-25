@@ -36,7 +36,7 @@ class EntityRelationship(EntityRelationshipBase, table=True):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "entity_from": 1,
                 "entity_to": 2,

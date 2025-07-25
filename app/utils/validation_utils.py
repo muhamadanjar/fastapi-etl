@@ -866,3 +866,98 @@ def validate_data_uniqueness(data: List[Dict], unique_fields: List[str]) -> Dict
             "error": f"Validation error: {str(e)}"
         }
     
+
+def validate_data_format(data: Union[Dict, List], expected_format: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Validate data format against expected format.
+    
+    Args:
+        data: Data to validate (dict or list of dicts)
+        expected_format: Dictionary with field names as keys and expected types as values
+        
+    Returns:
+        Dictionary with validation results
+    """
+    try:
+        if isinstance(data, dict):
+            data_list = [data]
+        elif isinstance(data, list):
+            data_list = data
+        else:
+            return {
+                "is_valid": False,
+                "error": "Data must be a dictionary or list of dictionaries"
+            }
+        
+        errors = []
+        
+        for i, record in enumerate(data_list):
+            if not isinstance(record, dict):
+                errors.append({
+                    "index": i,
+                    "error": "Record is not a dictionary"
+                })
+                continue
+            
+            for field, expected_type in expected_format.items():
+                if field not in record:
+                    errors.append({
+                        "index": i,
+                        "field": field,
+                        "error": f"Missing field '{field}'"
+                    })
+                    continue
+                
+                value = record[field]
+                
+                if expected_type == 'int':
+                    if not isinstance(value, int):
+                        errors.append({
+                            "index": i,
+                            "field": field,
+                            "value": value,
+                            "error": f"Expected int, got {type(value).__name__}"
+                        })
+                elif expected_type == 'float':
+                    if not isinstance(value, float):
+                        errors.append({
+                            "index": i,
+                            "field": field,
+                            "value": value,
+                            "error": f"Expected float, got {type(value).__name__}"
+                        })
+                elif expected_type == 'str':
+                    if not isinstance(value, str):
+                        errors.append({
+                            "index": i,
+                            "field": field,
+                            "value": value,
+                            "error": f"Expected str, got {type(value).__name__}"
+                        })
+                elif expected_type == 'bool':
+                    if not isinstance(value, bool):
+                        errors.append({
+                            "index": i,
+                            "field": field,
+                            "value": value,
+                            "error": f"Expected bool, got {type(value).__name__}"
+                        })
+                # Add more type checks as needed
+        
+        is_valid = len(errors) == 0
+        
+        return {
+            "is_valid": is_valid,
+            "errors": errors[:100],  # Limit to first 100 errors
+            "total_records": len(data_list),
+            "error_count": len(errors)
+        }
+    except Exception as e:
+        logger.log_error("validate_data_format", e, {
+            "data_type": type(data).__name__,
+            "expected_format": expected_format
+        })
+        return {
+            "is_valid": False,
+            "error": f"Validation error: {str(e)}"
+        }

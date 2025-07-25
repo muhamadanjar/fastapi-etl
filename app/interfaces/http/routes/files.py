@@ -3,10 +3,16 @@ from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from app.interfaces.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_current_user
 from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
 from app.services.file_service import FileService
-from app.infrastructure.db.models.user import User
+from app.infrastructure.db.models.auth import User
+
+from app.infrastructure.db.connection import (
+    database_manager,
+    get_session_dependency,
+    get_async_session_dependency
+)
 
 router = APIRouter()
 
@@ -17,7 +23,7 @@ async def upload_file(
     batch_id: Optional[str] = Query(None, description="Batch ID for grouping files"),
     metadata: Optional[str] = Query(None, description="Additional metadata as JSON string"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> FileUploadResponse:
     """Upload a file for ETL processing"""
     file_service = FileService(db)
@@ -44,7 +50,7 @@ async def list_files(
     status: Optional[str] = Query(None, description="Filter by processing status"),
     batch_id: Optional[str] = Query(None, description="Filter by batch ID"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[FileListResponse]:
     """List uploaded files with pagination and filters"""
     file_service = FileService(db)
@@ -54,7 +60,7 @@ async def list_files(
 async def get_file_detail(
     file_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> FileDetailResponse:
     """Get detailed information about a specific file"""
     file_service = FileService(db)
@@ -70,7 +76,7 @@ async def get_file_detail(
 async def process_file(
     file_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Start processing a specific file"""
     file_service = FileService(db)
@@ -81,7 +87,7 @@ async def process_file(
 async def delete_file(
     file_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Delete a file and its associated data"""
     file_service = FileService(db)
@@ -92,7 +98,7 @@ async def delete_file(
 async def download_file(
     file_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ):
     """Download original file"""
     file_service = FileService(db)
@@ -103,7 +109,7 @@ async def preview_file_data(
     file_id: UUID,
     rows: int = Query(10, ge=1, le=100, description="Number of rows to preview"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Preview file data (first N rows)"""
     file_service = FileService(db)
@@ -115,7 +121,7 @@ async def batch_upload(
     source_system: str = Query(..., description="Source system name"),
     batch_id: Optional[str] = Query(None, description="Batch ID for grouping files"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Upload multiple files in a batch"""
     file_service = FileService(db)

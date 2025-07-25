@@ -8,14 +8,13 @@ from sqlalchemy.orm import selectinload
 from .base import BaseRepository
 from ..models.auth import User, UserProfile
 from ....core.exceptions import DatabaseError
-from ....domain.repositories.user_repository import UserRepositoryInterface
 from ....infrastructure.db.models import User as UserEntity, UserProfile as UserProfileEntity
 from ....domain.value_objects.email import Email
 
 logger = logging.getLogger(__name__)
 
 
-class UserRepository(BaseRepository[User], UserRepositoryInterface):
+class UserRepository(BaseRepository[User]):
     """
     User repository implementation.
     """

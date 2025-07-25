@@ -66,7 +66,7 @@ class RawRecords(BaseModel, table=True):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "file_id": 1,
                 "sheet_name": "Sheet1",
@@ -135,7 +135,7 @@ class RawRecordsBulkCreate(SQLModel):
     records: List[RawRecordsCreate]
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "records": [
                     {

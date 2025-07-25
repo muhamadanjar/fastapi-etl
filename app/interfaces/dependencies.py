@@ -1,26 +1,33 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Generator, Optional
 import jwt
 from sqlmodel import Session
 
 from app.core.database import get_session
 from app.core.config import settings
+from app.infrastructure.db.connection import database_manager
 from app.services.auth_service import AuthService
 from app.infrastructure.db.models.auth import User
 
 # Security
 security = HTTPBearer()
 
-async def get_db() -> Session:
+async def get_db() -> Session: # type: ignore
     """Database dependency"""
-    async for session in get_session():
+    with get_session() as session:
         yield session
+
+
+# def get_session_dependency() -> Generator[Session, None, None]:
+#     """FastAPI dependency for getting database session."""
+#     with database_manager.get_session() as session:
+#         yield session
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
     try:

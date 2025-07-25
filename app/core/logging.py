@@ -97,6 +97,53 @@ class RequestContextFilter(logging.Filter):
         
         return True    
 
+class LoggerAdapter(logging.LoggerAdapter):
+    """Logger adapter that adds extra context to log messages."""
+    
+    def __init__(self, logger: logging.Logger, extra: Dict[str, Any]):
+        super().__init__(logger, extra)
+    
+    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+        """Process log message and add extra context."""
+        if "extra" not in kwargs:
+            kwargs["extra"] = {}
+        
+        kwargs["extra"].update(self.extra)
+        return msg, kwargs
+
+class StructuredLogger:
+    """Wrapper for structured logging with predefined fields."""
+    
+    def __init__(self, name: str, **default_fields):
+        self.logger = logging.getLogger(name)
+        self.default_fields = default_fields
+    
+    def _log(self, level: int, message: str, **fields):
+        """Log message with structured fields."""
+        extra_fields = {**self.default_fields, **fields}
+        extra = {"extra_fields": extra_fields}
+        self.logger.log(level, message, extra=extra)
+    
+    def debug(self, message: str, **fields):
+        """Log debug message."""
+        self._log(logging.DEBUG, message, **fields)
+    
+    def info(self, message: str, **fields):
+        """Log info message."""
+        self._log(logging.INFO, message, **fields)
+    
+    def warning(self, message: str, **fields):
+        """Log warning message."""
+        self._log(logging.WARNING, message, **fields)
+    
+    def error(self, message: str, **fields):
+        """Log error message."""
+        self._log(logging.ERROR, message, **fields)
+    
+    def critical(self, message: str, **fields):
+        """Log critical message."""
+        self._log(logging.CRITICAL, message, **fields)
+
 
 def setup_logging() -> None:
     """Setup application logging configuration."""
@@ -173,21 +220,6 @@ def get_logger(name: str, context: Optional[Dict[str, Any]] = None) -> logging.L
         logger.addFilter(context_filter)
     
     return logger
-
-
-class LoggerAdapter(logging.LoggerAdapter):
-    """Logger adapter that adds extra context to log messages."""
-    
-    def __init__(self, logger: logging.Logger, extra: Dict[str, Any]):
-        super().__init__(logger, extra)
-    
-    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
-        """Process log message and add extra context."""
-        if "extra" not in kwargs:
-            kwargs["extra"] = {}
-        
-        kwargs["extra"].update(self.extra)
-        return msg, kwargs
 
 
 def log_function_call(
@@ -285,40 +317,6 @@ def log_execution_time(logger: logging.Logger, level: int = logging.INFO):
         
         return wrapper
     return decorator
-
-
-class StructuredLogger:
-    """Wrapper for structured logging with predefined fields."""
-    
-    def __init__(self, name: str, **default_fields):
-        self.logger = logging.getLogger(name)
-        self.default_fields = default_fields
-    
-    def _log(self, level: int, message: str, **fields):
-        """Log message with structured fields."""
-        extra_fields = {**self.default_fields, **fields}
-        extra = {"extra_fields": extra_fields}
-        self.logger.log(level, message, extra=extra)
-    
-    def debug(self, message: str, **fields):
-        """Log debug message."""
-        self._log(logging.DEBUG, message, **fields)
-    
-    def info(self, message: str, **fields):
-        """Log info message."""
-        self._log(logging.INFO, message, **fields)
-    
-    def warning(self, message: str, **fields):
-        """Log warning message."""
-        self._log(logging.WARNING, message, **fields)
-    
-    def error(self, message: str, **fields):
-        """Log error message."""
-        self._log(logging.ERROR, message, **fields)
-    
-    def critical(self, message: str, **fields):
-        """Log critical message."""
-        self._log(logging.CRITICAL, message, **fields)
 
 
 def audit_log(

@@ -17,11 +17,7 @@ from app.infrastructure.db.service import user_service
 from app.infrastructure.messaging import messaging_manager, Message
 from app.infrastructure.messaging.decorators import message_handler, publish_event
 from app.infrastructure.messaging.manager import MessagingType
-from app.interfaces.http.routes import (
-    auth as auth_routes,
-    files as file_routes
-)
-
+from app.interfaces.http.routes import api_router as app_routes
 import uvicorn
 
 
@@ -37,47 +33,47 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
 
             # Initialize messaging
-            await messaging_manager.initialize(
-                enable_redis=True,
-                enable_websocket=True,
-                enable_sse=True,
-                enable_rabbitmq=True,
-                rabbitmq_config={
-                    'host': 'localhost',
-                    'port': 5672,
-                    'username': 'guest',
-                    'password': 'guest',
-                    'exchange_name': 'app_messages',
-                    'exchange_type': ExchangeType.TOPIC
-                },
-                redis_config={
-                    'host': 'localhost',
-                    'port': 6379,
-                    'db': 0
-                }
-            )
-            print("✅ Messaging system initialized")
+            # await messaging_manager.initialize(
+            #     enable_redis=True,
+            #     enable_websocket=True,
+            #     enable_sse=True,
+            #     enable_rabbitmq=True,
+            #     rabbitmq_config={
+            #         'host': 'localhost',
+            #         'port': 5672,
+            #         'username': 'guest',
+            #         'password': 'guest',
+            #         'exchange_name': 'app_messages',
+            #         'exchange_type': ExchangeType.TOPIC
+            #     },
+            #     redis_config={
+            #         'host': 'localhost',
+            #         'port': 6379,
+            #         'db': 0
+            #     }
+            # )
+            # print("✅ Messaging system initialized")
             await redis_manager.connect()
-            redis_cache = redis_manager.get_cache()
+            # redis_cache = redis_manager.get_cache()
             
             # Initialize cache manager with Redis + Memory fallback
-            await cache_manager.initialize(
-                primary_cache=redis_cache,
-                enable_fallback=True,
-                fallback_config={
-                    'max_size': 1000,
-                    'max_memory_mb': 50,
-                    'default_ttl': 300,
-                    'eviction_policy': 'lru'
-                },
-                recovery_interval=60
-            )
-            print("✅ Cache system initialized (Redis + Memory fallback)")
+            # await cache_manager.initialize(
+            #     primary_cache=redis_cache,
+            #     enable_fallback=True,
+            #     fallback_config={
+            #         'max_size': 1000,
+            #         'max_memory_mb': 50,
+            #         'default_ttl': 300,
+            #         'eviction_policy': 'lru'
+            #     },
+            #     recovery_interval=60
+            # )
+            # print("✅ Cache system initialized (Redis + Memory fallback)")
 
             await database_manager.connect()
             print("✅ Database connection established")
 
-            setup_logging()
+            # setup_logging()
             
         except Exception as e:
             print(f"⚠️  Redis unavailable: {e}")
@@ -113,7 +109,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_application() -> FastAPI:
     app = FastAPI(
-        title=settings.PROJECT_NAME,
+        title=settings.APP_NAME,
         description="FastAPI Clean Architecture Starter",
         version=settings.VERSION,
         debug=settings.DEBUG,
@@ -123,20 +119,20 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    if settings.ALLOWED_HOSTS:
-        app.add_middleware(
-            TrustedHostMiddleware,
-            allowed_hosts=settings.ALLOWED_HOSTS
-        )
+    # if settings.ALLOWED_HOSTS:
+    #     app.add_middleware(
+    #         TrustedHostMiddleware,
+    #         allowed_hosts=settings.ALLOWED_HOSTS
+    #     )
 
-    if settings.BACKEND_CORS_ORIGINS:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    # if settings.BACKEND_CORS_ORIGINS:
+    #     app.add_middleware(
+    #         CORSMiddleware,
+    #         allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    #         allow_credentials=True,
+    #         allow_methods=["*"],
+    #         allow_headers=["*"],
+    #     )
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
@@ -219,11 +215,9 @@ def create_application() -> FastAPI:
 
 
     # Include routers
-    # app.include_router(
-    #     auth_routes.router,
-    #     prefix="/api/v1/auth",
-    #     tags=["Authentication"]
-    # )
+    app.include_router(
+        app_routes,
+    )
     
     # app.include_router(
     #     user_routes.router,
@@ -252,62 +246,62 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
-# WebSocket endpoint
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    ws_messaging = messaging_manager.get_messaging(MessagingType.WEBSOCKET)
-    if not ws_messaging:
-        await websocket.close(code=1011)
-        return
+# # WebSocket endpoint
+# @app.websocket("/ws/{client_id}")
+# async def websocket_endpoint(websocket: WebSocket, client_id: str):
+#     ws_messaging = messaging_manager.get_messaging(MessagingType.WEBSOCKET)
+#     if not ws_messaging:
+#         await websocket.close(code=1011)
+#         return
     
-    if await ws_messaging.connect_client(websocket, client_id):
-        try:
-            while True:
-                message = await websocket.receive_text()
-                await ws_messaging.handle_client_message(client_id, message)
-        except WebSocketDisconnect:
-            await ws_messaging.disconnect_client(client_id)
+#     if await ws_messaging.connect_client(websocket, client_id):
+#         try:
+#             while True:
+#                 message = await websocket.receive_text()
+#                 await ws_messaging.handle_client_message(client_id, message)
+#         except WebSocketDisconnect:
+#             await ws_messaging.disconnect_client(client_id)
 
-# SSE endpoint
-@app.get("/events/{client_id}")
-async def sse_endpoint(request: Request, client_id: str):
-    sse_messaging = messaging_manager.get_messaging(MessagingType.SSE)
-    if not sse_messaging:
-        raise HTTPException(status_code=503, detail="SSE not available")
+# # SSE endpoint
+# @app.get("/events/{client_id}")
+# async def sse_endpoint(request: Request, client_id: str):
+#     sse_messaging = messaging_manager.get_messaging(MessagingType.SSE)
+#     if not sse_messaging:
+#         raise HTTPException(status_code=503, detail="SSE not available")
     
-    return await sse_messaging.create_connection(request, client_id)
+#     return await sse_messaging.create_connection(request, client_id)
 
-# Message handlers
-@message_handler("user.created", MessagingType.REDIS)
-async def handle_user_created(message: Message):
-    user_data = message.payload
-    print(f"New user created: {user_data}")
+# # Message handlers
+# @message_handler("user.created", MessagingType.REDIS)
+# async def handle_user_created(message: Message):
+#     user_data = message.payload
+#     print(f"New user created: {user_data}")
     
-    # Notify WebSocket clients
-    await messaging_manager.publish(
-        topic="notifications",
-        payload={"type": "user_created", "user": user_data},
-        messaging_type=MessagingType.WEBSOCKET
-    )
+#     # Notify WebSocket clients
+#     await messaging_manager.publish(
+#         topic="notifications",
+#         payload={"type": "user_created", "user": user_data},
+#         messaging_type=MessagingType.WEBSOCKET
+#     )
 
-# Publishing events
-@publish_event("user.updated", MessagingType.ALL)
-async def update_user(user_id: str, data: dict):
-    # Update user logic
-    updated_user = await user_service.update(user_id, data)
-    return updated_user  # This gets published automatically
+# # Publishing events
+# @publish_event("user.updated", MessagingType.ALL)
+# async def update_user(user_id: str, data: dict):
+#     # Update user logic
+#     updated_user = await user_service.update(user_id, data)
+#     return updated_user  # This gets published automatically
 
-# Health check
-@app.get("/health/messaging")
-async def messaging_health():
-    health = await messaging_manager.health_check()
-    return health
+# # Health check
+# @app.get("/health/messaging")
+# async def messaging_health():
+#     health = await messaging_manager.health_check()
+#     return health
 
-# Messaging stats
-@app.get("/admin/messaging/stats")
-async def messaging_stats():
-    stats = messaging_manager.get_statistics()
-    return stats
+# # Messaging stats
+# @app.get("/admin/messaging/stats")
+# async def messaging_stats():
+#     stats = messaging_manager.get_statistics()
+#     return stats
 
 def main():
     settings = get_settings()

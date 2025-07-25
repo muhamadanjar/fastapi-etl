@@ -1,26 +1,18 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from enum import Enum
 from uuid import UUID
-
+from enum import Enum
 from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from app.core.enums import QualityCheckResult
 
-
-class CheckResult(str, Enum):
-    """Enum untuk check result"""
-    PASS = "PASS"
-    FAIL = "FAIL"
-    WARNING = "WARNING"
-    SKIP = "SKIP"
-    ERROR = "ERROR"
 
 
 class QualityCheckResultBase(SQLModel):
     """Base model untuk QualityCheckResult dengan field-field umum"""
     execution_id: UUID = Field(foreign_key="etl_control.job_executions.id", index=True)
     rule_id: UUID = Field(foreign_key="etl_control.quality_rules.id", index=True)
-    check_result: CheckResult = Field(index=True)
+    check_result: QualityCheckResult = Field(index=True)
     records_checked: Optional[int] = Field(default=0)
     records_passed: Optional[int] = Field(default=0)
     records_failed: Optional[int] = Field(default=0)
@@ -44,7 +36,7 @@ class QualityCheckResult(QualityCheckResultBase, table=True):
     rule: Optional["QualityRule"] = Relationship(back_populates="quality_check_results")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "execution_id": 1,
                 "rule_id": 1,
@@ -88,7 +80,7 @@ class QualityCheckResultCreate(QualityCheckResultBase):
 
 class QualityCheckResultUpdate(SQLModel):
     """Schema untuk update quality check result"""
-    check_result: Optional[CheckResult] = Field(default=None)
+    check_result: Optional[QualityCheckResult] = Field(default=None)
     records_checked: Optional[int] = Field(default=None)
     records_passed: Optional[int] = Field(default=None)
     records_failed: Optional[int] = Field(default=None)
@@ -99,7 +91,7 @@ class QualityCheckResultUpdate(SQLModel):
     check_id: Optional[int] = Field(default=None, primary_key=True)
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "check_result": "PASS",
                 "records_checked": 1000,
@@ -129,7 +121,7 @@ class QualityCheckResultRead(QualityCheckResultBase):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "check_id": 1,
                 "execution_id": 1,

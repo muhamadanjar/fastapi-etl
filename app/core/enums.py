@@ -85,3 +85,60 @@ class RelationshipType(str, Enum):
     REFERENCES = "REFERENCES"
     DERIVED_FROM = "DERIVED_FROM"
     SIMILAR_TO = "SIMILAR_TO"
+
+
+
+class QualityRuleType(str, Enum):
+    """Enum untuk rule type"""
+    COMPLETENESS = "COMPLETENESS"
+    UNIQUENESS = "UNIQUENESS"
+    VALIDITY = "VALIDITY"
+    CONSISTENCY = "CONSISTENCY"
+    ACCURACY = "ACCURACY"
+    TIMELINESS = "TIMELINESS"
+    REFERENTIAL_INTEGRITY = "REFERENTIAL_INTEGRITY"
+
+
+class QualityCheckResult(str, Enum):
+    """Enum untuk check result"""
+    PASS = "PASS"
+    FAIL = "FAIL"
+    WARNING = "WARNING"
+    SKIP = "SKIP"
+    ERROR = "ERROR"
+
+class TransformationType(str, Enum):
+    """Enum for transformation types."""
+    MAPPING = "MAPPING"
+    CALCULATION = "CALCULATION"
+    VALIDATION = "VALIDATION"
+    ENRICHMENT = "ENRICHMENT"
+
+class MappingType(str, Enum):
+    """Enum for mapping types."""
+    DIRECT = "DIRECT"
+    CALCULATED = "CALCULATED"
+    LOOKUP = "LOOKUP"
+
+class NotificationType(str, Enum):
+    """Enum for notification types."""
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    SUCCESS = "SUCCESS"
+
+class NotificationChannel(str, Enum):
+    """Enum for notification channels."""
+    EMAIL = "EMAIL"
+    SMS = "SMS"
+    SLACK = "SLACK"
+    WEBHOOK = "WEBHOOK"
+    PUSH_NOTIFICATION = "PUSH_NOTIFICATION"
+
+class NotificationStatus(str, Enum):
+    """Enum for notification statuses."""
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
+    DELIVERED = "DELIVERED"
+    READ = "READ"

@@ -1,9 +1,8 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from enum import Enum
 from sqlmodel import SQLModel, Field, Column, Relationship, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
-
+from enum import Enum
 from app.infrastructure.db.models.base import BaseModel
 
 
@@ -35,7 +34,7 @@ class SourceType(str, Enum):
 class EtlJobBase(BaseModel):
     """Base model untuk EtlJob dengan field-field umum"""
     job_name: str = Field(max_length=100, index=True, unique=True)
-    job_type: JobType = Field(sa_column=Column(SAEnum(JobType, name="jobtype"), index=True), )
+    job_type: JobType = Field(sa_column=Column(SAEnum(JobType, name="jobtype"), index=True),)
     job_category: JobCategory = Field(sa_column=Column(SAEnum(JobCategory, name="jobcategory"), index=True),)
     source_type: SourceType = Field(sa_column=Column(SAEnum(SourceType, name="sourcetype"), index=True), )
     target_schema: Optional[str] = Field(default=None, max_length=50)
@@ -58,7 +57,8 @@ class EtlJob(EtlJobBase, table=True):
     executions: List["JobExecution"] = Relationship(back_populates="job")
     
     class Config:
-        schema_extra = {
+        
+        json_schema_extra = {
             "example": {
                 "job_name": "process_customer_data",
                 "job_type": "TRANSFORM",

@@ -1,29 +1,19 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from enum import Enum
 from decimal import Decimal
 from uuid import UUID
-
+from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
-
+from app.core.enums import QualityRuleType
 from app.infrastructure.db.models.base import BaseModel
 
 
-class RuleType(str, Enum):
-    """Enum untuk rule type"""
-    COMPLETENESS = "COMPLETENESS"
-    UNIQUENESS = "UNIQUENESS"
-    VALIDITY = "VALIDITY"
-    CONSISTENCY = "CONSISTENCY"
-    ACCURACY = "ACCURACY"
-    TIMELINESS = "TIMELINESS"
-    REFERENTIAL_INTEGRITY = "REFERENTIAL_INTEGRITY"
 
 
 class QualityRuleBase(BaseModel):
     """Base model untuk QualityRule dengan field-field umum"""
     rule_name: str = Field(max_length=100, index=True, unique=True)
-    rule_type: RuleType = Field(index=True)
+    rule_type: QualityRuleType = Field(index=True)
     entity_type: Optional[str] = Field(default=None, max_length=100, index=True)
     field_name: Optional[str] = Field(default=None, max_length=100, index=True)
     rule_expression: str = Field(description="SQL expression atau rule logic")
@@ -44,7 +34,7 @@ class QualityRule(QualityRuleBase, table=True):
     quality_check_results: List["QualityCheckResult"] = Relationship(back_populates="rule")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "rule_name": "email_format_validation",
                 "rule_type": "VALIDITY",
@@ -65,7 +55,7 @@ class QualityRuleCreate(QualityRuleBase):
 class QualityRuleUpdate(SQLModel):
     """Schema untuk update quality rule"""
     rule_name: Optional[str] = Field(default=None, max_length=100)
-    rule_type: Optional[RuleType] = Field(default=None)
+    rule_type: Optional[QualityRuleType] = Field(default=None)
     entity_type: Optional[str] = Field(default=None, max_length=100)
     field_name: Optional[str] = Field(default=None, max_length=100)
     rule_expression: Optional[str] = Field(default=None)
@@ -87,7 +77,7 @@ class QualityRuleReadWithResults(QualityRuleRead):
 class QualityRuleFilter(SQLModel):
     """Schema untuk filter quality rule"""
     rule_name: Optional[str] = Field(default=None)
-    rule_type: Optional[RuleType] = Field(default=None)
+    rule_type: Optional[QualityRuleType] = Field(default=None)
     entity_type: Optional[str] = Field(default=None)
     field_name: Optional[str] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
@@ -96,7 +86,7 @@ class QualityRuleFilter(SQLModel):
 
 class QualityRuleSummary(SQLModel):
     """Schema untuk summary quality rule"""
-    rule_type: RuleType
+    rule_type: QualityRuleType
     total_rules: int
     active_rules: int
     inactive_rules: int
@@ -119,7 +109,7 @@ class QualityRuleTemplate(SQLModel):
     """Schema untuk template quality rule"""
     template_name: str = Field(max_length=100)
     template_description: Optional[str] = Field(default=None)
-    rule_type: RuleType
+    rule_type: QualityRuleType
     template_expression: str
     parameters: Optional[Dict[str, Any]] = Field(default=None)
     applicable_fields: Optional[List[str]] = Field(default=None)

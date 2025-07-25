@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, Column, JSON
-
+from uuid import UUID
 from app.infrastructure.db.models.base import BaseModel
 
 
@@ -44,7 +44,7 @@ class ChangeLogCreate(ChangeLogBase):
 
 class ChangeLogRead(ChangeLogBase):
     """Schema for reading change log records."""
-    change_id: int
+    change_id: UUID
     changed_at: datetime
 
 
@@ -57,3 +57,4 @@ class ChangeLogUpdate(SQLModel):
     new_values: Optional[Dict[str, Any]] = Field(default=None)
     changed_by: Optional[str] = Field(default=None, max_length=100)
     change_reason: Optional[str] = Field(default=None, max_length=255)
+    

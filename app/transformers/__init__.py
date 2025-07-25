@@ -2,7 +2,7 @@
 # app/transformers/__init__.py
 # ==============================================
 from .base_transformer import BaseTransformer
-from .data_cleaner import DataCleaner
+# from .data_cleaner import DataCleaner
 from .data_normalizer import DataNormalizer
 from .data_validator import DataValidator
 from .entity_matcher import EntityMatcher
@@ -10,9 +10,9 @@ from .aggregator import Aggregator
 
 # Transformer registry for pipeline building
 TRANSFORMER_REGISTRY = {
-    'cleaner': DataCleaner,
-    'data_cleaner': DataCleaner,
-    'clean': DataCleaner,
+    # 'cleaner': DataCleaner,
+    # 'data_cleaner': DataCleaner,
+    # 'clean': DataCleaner,
     
     'normalizer': DataNormalizer,
     'data_normalizer': DataNormalizer,

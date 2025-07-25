@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from enum import Enum
 from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column, Relationship
 from sqlalchemy.dialects.postgresql import JSONB
-
+from enum import Enum
 from app.infrastructure.db.models.base import BaseModel
 
 
@@ -49,7 +48,7 @@ class JobExecution(JobExecutionBase, table=True):
     quality_check_results: List["QualityCheckResult"] = Relationship(back_populates="execution")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "job_id": 1,
                 "batch_id": "batch_2024_01_001",

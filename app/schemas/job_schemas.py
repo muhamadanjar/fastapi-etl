@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, Field
 from enum import Enum
 from .base import BaseResponse
@@ -215,4 +216,31 @@ class JobBatchOperationResponse(BaseResponse):
     successful_operations: int
     failed_operations: int
     operation_details: List[Dict[str, Any]]
+
+class JobResponse(BaseResponse):
+    """Schema for job response."""
+    job_id: UUID
+    job_name: str
+    status: JobStatus
+    message: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+class JobScheduleCreate(BaseModel):
+    """Schema for creating a job schedule."""
+    job_id: UUID
+    cron_expression: str = Field(description="Cron expression for scheduling the job")
+    timezone: str = Field(default="UTC", description="Timezone for the schedule")
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    is_active: bool = True
+
+class JobConfigUpdate(BaseModel):
+    """Schema for updating job configuration."""
+    job_id: UUID
+    job_config: Dict[str, Any] = Field(description="Updated job configuration in JSON format")
+    is_active: Optional[bool] = None
+    timeout_minutes: Optional[int] = Field(default=None, ge=1, le=1440)
+    max_retries: Optional[int] = Field(default=None, ge=0, le=10)
+    priority: Optional[int] = Field(default=None, ge=1, le=5)
+    
     

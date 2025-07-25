@@ -5,7 +5,7 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 from kombu import Queue
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from app.core.config import settings
 

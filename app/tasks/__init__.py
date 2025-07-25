@@ -1,16 +1,17 @@
 # ==============================================
 # app/tasks/__init__.py
 # ==============================================
+from typing import Any, Dict, List
 from .celery_app import celery_app
-from .etl_tasks import (
-    process_file_task,
-    run_transformation_pipeline,
-    execute_etl_job,
-    validate_data_quality,
-    generate_data_lineage,
-    cleanup_old_files,
-    backup_processed_data
-)
+# from .etl_tasks import (
+#     process_file_task,
+#     run_transformation_pipeline,
+#     execute_etl_job,
+#     validate_data_quality,
+#     generate_data_lineage,
+#     cleanup_old_files,
+#     backup_processed_data
+# )
 from .monitoring_tasks import (
     health_check_task,
     collect_system_metrics,
@@ -31,13 +32,13 @@ from .cleanup_tasks import (
 # Task registry for dynamic task execution
 TASK_REGISTRY = {
     # ETL Tasks
-    'process_file': process_file_task,
-    'transform_data': run_transformation_pipeline,
-    'execute_job': execute_etl_job,
-    'validate_quality': validate_data_quality,
-    'generate_lineage': generate_data_lineage,
-    'cleanup_files': cleanup_old_files,
-    'backup_data': backup_processed_data,
+    # 'process_file': process_file_task,
+    # 'transform_data': run_transformation_pipeline,
+    # 'execute_job': execute_etl_job,
+    # 'validate_quality': validate_data_quality,
+    # 'generate_lineage': generate_data_lineage,
+    # 'cleanup_files': cleanup_old_files,
+    # 'backup_data': backup_processed_data,
     
     # Monitoring Tasks
     'health_check': health_check_task,

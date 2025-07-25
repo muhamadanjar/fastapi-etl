@@ -36,3 +36,34 @@ class RawRecordCreate(BaseModel):
 class RawRecordRead(RawRecordCreate):
     record_id: int
     created_at: datetime
+
+class SuccessResponse(BaseModel):
+    """Base schema for successful responses."""
+    status: str = "success"
+    message: Optional[str] = None
+    data: Optional[dict] = None
+
+class ErrorResponseDetail(BaseModel):
+    """Schema for error details in responses."""
+    code: str
+    message: str
+    details: Optional[str] = None
+
+class ValidationErrorResponse(BaseModel):
+    """Schema for validation error responses."""
+    status: str = "error"
+    message: str = "Validation failed"
+    errors: List[ErrorResponseDetail]
+
+class ProcessingStatusResponse(BaseModel):
+    """Schema for processing status responses."""
+    status: str = "processing"
+    message: Optional[str] = None
+    progress: Optional[float] = None  # Percentage of completion
+    estimated_time_remaining: Optional[int] = None  # In seconds
+
+class DashboardResponse(BaseModel):
+    """Schema for dashboard data responses."""
+    status: str = "success"
+    message: Optional[str] = None
+    data: dict

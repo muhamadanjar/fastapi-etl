@@ -27,7 +27,7 @@ class AggregatedData(AggregatedDataBase,table=True):
     
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "aggregation_name": "monthly_sales_summary",
                 "aggregation_type": "SUM",

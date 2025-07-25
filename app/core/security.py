@@ -101,6 +101,27 @@ class PasswordPolicy:
         return pwd_context.hash(password)
     
 
+class SecurityHeaders:
+    """Security headers for HTTP responses."""
+    
+    @staticmethod
+    def get_security_headers() -> Dict[str, str]:
+        """
+        Get standard security headers.
+        
+        Returns:
+            Dictionary of security headers
+        """
+        return {
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "X-XSS-Protection": "1; mode=block",
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Content-Security-Policy": "default-src 'self'",
+        }   
+
+
 def create_access_token(
     data: Dict[str, Any],
     expires_delta: Optional[timedelta] = None,
@@ -245,6 +266,8 @@ def verify_token(token: str, token_type: str = "access") -> TokenData:
             message="Could not validate credentials",
             details={"jwt_error": str(e)}
         )
+
+
 def decode_token_without_verification(token: str) -> Dict[str, Any]:
     """
     Decode JWT token without verification (for debugging purposes).
@@ -329,26 +352,6 @@ def mask_sensitive_data(data: str, visible_chars: int = 4, mask_char: str = "*")
     return mask_char * (len(data) - visible_chars) + data[-visible_chars:]
 
 
-class SecurityHeaders:
-    """Security headers for HTTP responses."""
-    
-    @staticmethod
-    def get_security_headers() -> Dict[str, str]:
-        """
-        Get standard security headers.
-        
-        Returns:
-            Dictionary of security headers
-        """
-        return {
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "X-XSS-Protection": "1; mode=block",
-            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-            "Referrer-Policy": "strict-origin-when-cross-origin",
-            "Content-Security-Policy": "default-src 'self'",
-        }    
-
 def validate_email(email: str) -> bool:
     """
     Validate email format.
@@ -374,6 +377,7 @@ def validate_email(email: str) -> bool:
         )
     
     return True
+
 
 def sanitize_filename(filename: str) -> str:
     """

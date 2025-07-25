@@ -47,7 +47,7 @@ class FilterSchema(BaseModel):
 class SortSchema(BaseModel):
     """Schema for sorting options."""
     field: str
-    direction: str = Field(default="asc", regex="^(asc|desc)$")
+    direction: str = Field(default="asc", pattern="^(asc|desc)$")
 
 
 class SearchSchema(BaseModel):

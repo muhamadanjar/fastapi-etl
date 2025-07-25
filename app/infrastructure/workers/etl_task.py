@@ -1,4 +1,4 @@
-from app.tasks.celery_app import celery
+from app.tasks import celery_app as celery
 from app.services.etl_service import ETLService
 from app.infrastructure.db.etl_repo_impl import ETLRepositoryImpl
 

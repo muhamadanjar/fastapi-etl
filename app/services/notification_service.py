@@ -14,7 +14,7 @@ from app.services.base import BaseService
 from app.core.exceptions import NotificationError, ServiceError
 from app.core.enums import NotificationType, NotificationChannel, NotificationStatus
 from app.utils.date_utils import get_current_timestamp
-from app.config import settings
+from app.core.config import settings
 
 
 class NotificationService(BaseService):

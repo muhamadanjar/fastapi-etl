@@ -5,8 +5,8 @@ import os
 import psutil
 import json
 import smtplib
-from email.mime.text import MimeText
-from email.mime.multipart import MimeMultipart
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,11 +15,11 @@ import pandas as pd
 import requests
 
 from .celery_app import celery_app
-from app.interfaces.dependencies import get_db
-from app.infrastructure.db.models.etl_control.job_executions import JobExecutions
-from app.infrastructure.db.models.etl_control.etl_jobs import ETLJobs
+# from app.interfaces.dependencies import get_db
+from app.infrastructure.db.models.etl_control.job_executions import JobExecution
+from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
-from app.infrastructure.db.models.etl_control.quality_check_results import QualityCheckResults
+from app.infrastructure.db.models.etl_control.quality_check_results import QualityCheckResult
 from app.utils.logger import get_logger
 from app.core.config import settings
 from app.core.exceptions import MonitoringException
@@ -264,7 +264,7 @@ def check_job_status(self):
         }
         
         # Get all jobs
-        jobs = db.exec(select(ETLJobs)).all()
+        jobs = db.exec(select(EtlJob)).all()
         job_analysis['total_jobs'] = len(jobs)
         
         current_time = datetime.utcnow()
@@ -275,9 +275,9 @@ def check_job_status(self):
                 
                 # Get latest execution
                 latest_execution = db.exec(
-                    select(JobExecutions)
-                    .where(JobExecutions.job_id == job.job_id)
-                    .order_by(JobExecutions.start_time.desc())
+                    select(JobExecution)
+                    .where(JobExecution.job_id == job.job_id)
+                    .order_by(JobExecution.start_time.desc())
                     .limit(1)
                 ).first()
                 
@@ -508,7 +508,7 @@ async def _check_database_health(db: Session) -> Dict[str, Any]:
     """Check database health and connectivity"""
     try:
         # Test basic connectivity
-        result = db.exec(select(func.count()).select_from(ETLJobs)).first()
+        result = db.exec(select(func.count()).select_from(EtlJob)).first()
         
         # Check connection pool status
         pool_status = {
@@ -614,8 +614,8 @@ async def _check_etl_jobs_health(db: Session) -> Dict[str, Any]:
         
         # Recent executions (last 24 hours)
         recent_executions = db.exec(
-            select(JobExecutions)
-            .where(JobExecutions.start_time >= current_time - timedelta(hours=24))
+            select(JobExecution)
+            .where(JobExecution.start_time >= current_time - timedelta(hours=24))
         ).all()
         
         status_counts = {
@@ -769,8 +769,8 @@ async def _collect_database_metrics(db: Session) -> Dict[str, Any]:
     try:
         # Count records in main tables
         file_count = db.exec(select(func.count()).select_from(FileRegistry)).first()
-        job_count = db.exec(select(func.count()).select_from(ETLJobs)).first()
-        execution_count = db.exec(select(func.count()).select_from(JobExecutions)).first()
+        job_count = db.exec(select(func.count()).select_from(EtlJob)).first()
+        execution_count = db.exec(select(func.count()).select_from(JobExecution)).first()
         
         # Recent activity (last 24 hours)
         recent_files = db.exec(
@@ -779,8 +779,8 @@ async def _collect_database_metrics(db: Session) -> Dict[str, Any]:
         ).first()
         
         recent_executions = db.exec(
-            select(func.count()).select_from(JobExecutions)
-            .where(JobExecutions.start_time >= datetime.utcnow() - timedelta(hours=24))
+            select(func.count()).select_from(JobExecution)
+            .where(JobExecution.start_time >= datetime.utcnow() - timedelta(hours=24))
         ).first()
         
         return {
@@ -851,9 +851,9 @@ async def _collect_performance_metrics(db: Session) -> Dict[str, Any]:
             start_time = current_time - period_delta
             
             executions = db.exec(
-                select(JobExecutions)
-                .where(JobExecutions.start_time >= start_time)
-                .where(JobExecutions.status.in_(['SUCCESS', 'FAILED']))
+                select(JobExecution)
+                .where(JobExecution.start_time >= start_time)
+                .where(JobExecution.status.in_(['SUCCESS', 'FAILED']))
             ).all()
             
             if executions:
@@ -905,9 +905,9 @@ async def _analyze_job_performance(db: Session, start_date: datetime, end_date: 
     """Analyze ETL job performance over time period"""
     try:
         executions = db.exec(
-            select(JobExecutions)
-            .where(JobExecutions.start_time >= start_date)
-            .where(JobExecutions.start_time <= end_date)
+            select(JobExecution)
+            .where(JobExecution.start_time >= start_date)
+            .where(JobExecution.start_time <= end_date)
         ).all()
         
         if not executions:
@@ -992,9 +992,9 @@ async def _analyze_data_quality(db: Session, start_date: datetime, end_date: dat
     """Analyze data quality metrics"""
     try:
         quality_checks = db.exec(
-            select(QualityCheckResults)
-            .where(QualityCheckResults.created_at >= start_date)
-            .where(QualityCheckResults.created_at <= end_date)
+            select(QualityCheckResult)
+            .where(QualityCheckResult.created_at >= start_date)
+            .where(QualityCheckResult.created_at <= end_date)
         ).all()
         
         if not quality_checks:
@@ -1227,7 +1227,7 @@ async def _send_email_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
             return {'type': 'email', 'success': False, 'error': 'Email not configured'}
         
         # Create email message
-        msg = MimeMultipart()
+        msg = MIMEMultipart()
         msg['From'] = settings.EMAIL_FROM
         msg['To'] = settings.ALERT_EMAIL_TO
         msg['Subject'] = f"ETL Alert: {alert['type']}"
@@ -1243,7 +1243,7 @@ async def _send_email_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
         {json.dumps(alert.get('data', {}), indent=2)}
         """
         
-        msg.attach(MimeText(body, 'plain'))
+        msg.attach(MIMEText(body, 'plain'))
         
         # Send email
         server = smtplib.SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT)
@@ -1384,9 +1384,9 @@ async def _cleanup_database_logs(db: Session, cutoff_date: datetime) -> Dict[str
         
         # Example: Delete old job execution logs
         old_executions = db.exec(
-            select(JobExecutions)
-            .where(JobExecutions.start_time < cutoff_date)
-            .where(JobExecutions.status.in_(['SUCCESS', 'FAILED']))
+            select(JobExecution)
+            .where(JobExecution.start_time < cutoff_date)
+            .where(JobExecution.status.in_(['SUCCESS', 'FAILED']))
         ).all()
         
         for execution in old_executions:
@@ -1412,8 +1412,8 @@ async def _collect_etl_metrics(db: Session) -> Dict[str, Any]:
         
         # Job execution statistics
         recent_executions = db.exec(
-            select(JobExecutions)
-            .where(JobExecutions.start_time >= current_time - timedelta(hours=24))
+            select(JobExecution)
+            .where(JobExecution.start_time >= current_time - timedelta(hours=24))
         ).all()
         
         if recent_executions:

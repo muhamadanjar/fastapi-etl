@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 from typing import Dict, Any
-
-from app.interfaces.dependencies import get_db, get_current_user
-from app.schemas.auth import UserCreate, UserResponse, Token, ChangePassword
+from app.interfaces.dependencies import get_current_user, get_db
+from app.schemas.auth import UserCreate, UserRead as UserResponse, Token, PasswordChange
 from app.services.auth_service import AuthService
 from app.infrastructure.db.models import User
+# from app.infrastructure.db.connection import get_session_dependency
 
 router = APIRouter()
 
@@ -54,7 +54,7 @@ async def get_current_user_info(
 
 @router.put("/change-password")
 async def change_password(
-    password_data: ChangePassword,
+    password_data: PasswordChange,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, str]:

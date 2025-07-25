@@ -9,7 +9,7 @@ from sqlalchemy import select, and_, func
 from app.services.base import BaseService
 from app.core.exceptions import DataQualityError, ServiceError
 from app.core.enums import QualityRuleType, QualityCheckResult
-from app.utils.validation_utils import validate_completeness, validate_uniqueness, validate_format
+from app.utils.validation_utils import validate_data_completeness, validate_data_uniqueness, validate_data_format
 from app.utils.date_utils import get_current_timestamp
 
 

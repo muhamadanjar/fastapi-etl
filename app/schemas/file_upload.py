@@ -153,3 +153,20 @@ class FileExportResponse(BaseResponse):
     expires_at: datetime
     file_size: int
     format: str
+
+class FileListResponse(BaseResponse):
+    """Schema for file list response."""
+    files: List[FileMetadata]
+    total_files: int
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=10, ge=1, le=100)
+    total_pages: int = Field(default=1, ge=1)
+
+class FileDetailResponse(BaseResponse):
+    """Schema for file detail response."""
+    file: FileMetadata
+    structure_analysis: Optional[FileStructureAnalysis] = None
+    preview: Optional[FilePreview] = None
+    processing_status: Optional[FileProcessingStatus] = None
+    validation_result: Optional[FileValidationResult] = None
+    

@@ -100,7 +100,7 @@ class ColumnStructure(BaseModel, table=True):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "file_id": 1,
                 "column_name": "email_address",
@@ -194,7 +194,7 @@ class ColumnStructureBulkCreate(SQLModel):
     structures: List[ColumnStructureCreate]
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "structures": [
                     {
@@ -232,7 +232,7 @@ class ColumnStructureAnalysis(SQLModel):
     recommendations: List[str]
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "file_id": 1,
                 "total_columns": 5,

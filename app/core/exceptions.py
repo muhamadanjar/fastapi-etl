@@ -453,6 +453,137 @@ class FileStorageError(AppException):
             status_code=500,
         )
 
+class MonitoringException(AppException):
+    """Exception raised for monitoring-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "Monitoring error occurred",
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.operation = operation
+        
+        exception_details = details or {}
+        if operation:
+            exception_details["operation"] = operation
+        
+        super().__init__(
+            message=message,
+            error_code="MONITORING_ERROR",
+            details=exception_details,
+            status_code=500,
+        )
+
+class DataQualityError(AppException):
+    """Exception raised for data quality-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "Data quality error occurred",
+        check: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.check = check
+        
+        exception_details = details or {}
+        if check:
+            exception_details["check"] = check
+        
+        super().__init__(
+            message=message,
+            error_code="DATA_QUALITY_ERROR",
+            details=exception_details,
+            status_code=500,
+        )
+
+class TransformationError(AppException):
+    """Exception raised for transformation-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "Transformation error occurred",
+        transformation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.transformation = transformation
+        
+        exception_details = details or {}
+        if transformation:
+            exception_details["transformation"] = transformation
+        
+        super().__init__(
+            message=message,
+            error_code="TRANSFORMATION_ERROR",
+            details=exception_details,
+            status_code=500,
+        )
+
+class MonitoringError(AppException):
+    """Exception raised for data transformation errors."""
+    
+    def __init__(
+        self,
+        message: str = "Data transformation error occurred",
+        transformation_type: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.transformation_type = transformation_type
+        
+        exception_details = details or {}
+        if transformation_type:
+            exception_details["transformation_type"] = transformation_type
+        
+        super().__init__(
+            message=message,
+            error_code="MONITORING_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
+
+class NotificationError(AppException):
+    """Exception raised for notification-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "Notification error occurred",
+        notification_type: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.notification_type = notification_type
+        
+        exception_details = details or {}
+        if notification_type:
+            exception_details["notification_type"] = notification_type
+        
+        super().__init__(
+            message=message,
+            error_code="NOTIFICATION_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
+
+class DataTransformationException(AppException):
+    """Exception raised for data transformation errors."""
+    
+    def __init__(
+        self,
+        message: str = "Data transformation error occurred",
+        transformation_type: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.transformation_type = transformation_type
+        
+        exception_details = details or {}
+        if transformation_type:
+            exception_details["transformation_type"] = transformation_type
+        
+        super().__init__(
+            message=message,
+            error_code="DATA_TRANSFORMATION_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
 
 def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(

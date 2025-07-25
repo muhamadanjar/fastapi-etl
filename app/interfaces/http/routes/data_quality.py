@@ -3,13 +3,13 @@ from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from app.dependencies import get_db, get_current_user
+from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.quality_schemas import (
     QualityRuleCreate, QualityRuleUpdate, QualityRuleResponse,
-    QualityCheckResult, QualityReport
+    QualityCheckResultRead, QualityReport
 )
 from app.services.data_quality_service import DataQualityService
-from app.models.base import User
+from app.infrastructure.db.models import User
 
 router = APIRouter()
 
@@ -83,7 +83,7 @@ async def execute_quality_rule(
     target_data: Optional[str] = Query(None, description="Specific data to check"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> QualityCheckResult:
+) -> QualityCheckResultRead:
     """Execute a specific quality rule"""
     quality_service = DataQualityService(db)
     return await quality_service.execute_quality_rule(rule_id, target_data, current_user.id)
@@ -94,7 +94,7 @@ async def run_quality_check(
     rules: Optional[List[UUID]] = Query(None, description="Specific rules to run"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[QualityCheckResult]:
+) -> List[QualityCheckResultRead]:
     """Run quality checks on specific entity type"""
     quality_service = DataQualityService(db)
     return await quality_service.run_quality_check(entity_type, rules, current_user.id)
@@ -108,7 +108,7 @@ async def get_quality_check_results(
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[QualityCheckResult]:
+) -> List[QualityCheckResultRead]:
     """Get quality check results with pagination"""
     quality_service = DataQualityService(db)
     return await quality_service.get_quality_check_results(

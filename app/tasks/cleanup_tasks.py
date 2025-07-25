@@ -1,6 +1,6 @@
 from app.tasks.celery_app import celery_app
 from app.utils.file_utils import cleanup_old_files
-from app.database import get_session
+from app.core.database import get_session
 from app.services.etl_service import ETLService
 
 @celery_app.task(name="cleanup.remove_old_files")

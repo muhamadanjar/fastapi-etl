@@ -11,7 +11,6 @@ from app.services.base import BaseService
 from app.core.exceptions import ETLError, ServiceError
 from app.core.enums import JobStatus, JobType
 from app.utils.date_utils import get_current_timestamp
-from app.tasks.etl_tasks import execute_etl_job
 
 
 class ETLService(BaseService):
@@ -56,6 +55,8 @@ class ETLService(BaseService):
     async def execute_job(self, job_id: int, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute an ETL job."""
         try:
+
+            from app.tasks.etl_tasks import execute_etl_job
             self.log_operation("execute_job", {"job_id": job_id})
             
             # Get job details

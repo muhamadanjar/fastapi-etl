@@ -12,7 +12,7 @@ from enum import Enum
 from app.utils.logger import get_logger
 from app.core.exceptions import DataTransformationException
 from app.infrastructure.db.models.staging.standardized_data import StandardizedData
-from app.infrastructure.db.models.etl_control.job_executions import JobExecutions
+from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 
 logger = get_logger(__name__)
 

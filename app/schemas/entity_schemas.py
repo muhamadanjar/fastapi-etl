@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -7,6 +8,22 @@ from app.core.enums import EntityType, RelationshipType
 from .base import BaseResponse
 
 
+class EntityResponse(BaseResponse):
+    """Base response schema for entity operations."""
+    entity_id: UUID
+    entity_type: EntityType
+    entity_key: str
+    entity_data: Dict[str, Any]
+    source_files: Optional[List[int]] = None
+    confidence_score: float
+    last_updated: datetime
+    version: int
+    is_active: bool
+    tags: Optional[List[str]] = None
+    description: Optional[str] = None
+    external_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class EntityCreate(BaseModel):
@@ -49,6 +66,19 @@ class EntityUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=1000)
     external_id: Optional[str] = Field(default=None, max_length=255)
 
+
+class EntityRelationshipResponse(BaseResponse):
+    """Response schema for entity relationships."""
+    relationship_id: UUID
+    entity_from: int
+    entity_to: int
+    relationship_type: RelationshipType
+    relationship_strength: float
+    metadata: Optional[Dict[str, Any]] = None
+    description: Optional[str] = None
+    is_bidirectional: bool
+    created_at: datetime
+    updated_at: datetime
 
 class EntityRelationshipCreate(BaseModel):
     """Schema for creating entity relationships."""
@@ -103,3 +133,28 @@ class EntitySearchResult(BaseModel):
     """Schema for entity search results."""
     entity: EntityRead
     # relevance_score
+
+class EntitySearchRequest(BaseModel):
+    """Request schema for entity search."""
+    search_query: str = Field(min_length=1, max_length=500, description="Search query string")
+    entity_type: Optional[EntityType] = None
+    fields: Optional[List[str]] = Field(default=None, description="Fields to search in")
+    confidence_threshold: Optional[float] = Field(default=0.0, ge=0, le=1)
+    tags: Optional[List[str]] = None
+    source_files: Optional[List[int]] = None
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
+    include_inactive: bool = Field(default=False, description="Include inactive entities")
+    fuzzy_search: bool = Field(default=False, description="Enable fuzzy search")
+    similarity_threshold: Optional[float] = Field(default=0.8, ge=0, le=1)
+
+
+class EntityMergeRequest(BaseModel):
+    """Request schema for merging entities."""
+    target_entity_id: int = Field(description="ID of the entity to merge into")
+    source_entity_ids: List[int] = Field(
+        description="List of entity IDs to merge into the target entity",
+        min_items=1,
+        example=[1, 2, 3]
+    )
+    

@@ -138,6 +138,9 @@ class LoggingSettings(BaseSettings):
 
 
 class Settings(BaseSettings):
+    APP_NAME: str = Field(default="FastAPI ETL", env="APP_NAME")
+    VERSION: str = Field(default="1.0.0", env="VERSION")
+    DEBUG: bool = Field(default=True, env="DEBUG")
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
     redis_url: Optional[str] = Field(env="REDIS_URL", default=None)
     database_url: str = Field(default="postgresql://user:password@db:5432/etl_db", env="DATABASE_URL")

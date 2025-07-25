@@ -30,7 +30,7 @@ class StandardizedData(StandardizedDataBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "source_file_id": 1,
                 "source_record_id": 123,

@@ -35,7 +35,7 @@ class Entity(EntityBase, table=True):
     )
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "entity_type": "PERSON",
                 "entity_key": "john_doe_001",
