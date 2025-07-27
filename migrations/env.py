@@ -5,8 +5,8 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from sqlalchemy import create_engine
-from sqlmodel import SQLModel
+# from sqlalchemy import create_engine
+from sqlmodel import SQLModel, create_engine
 
 from app.infrastructure.db.models.config import *
 from app.infrastructure.db.models.raw_data import *

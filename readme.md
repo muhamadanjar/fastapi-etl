@@ -226,3 +226,14 @@ fastapi-clean-arch-starter/
 ├── .pre-commit-config.yaml      # Pre-commit hooks
 └── README.md                    # Project documentation
 ```
+
+# Schema DB
+```sql
+create schema audit;
+create schema config;
+create schema etl_control;
+create schema processed;
+create schema raw_data;
+create schema staging;
+create schema transformation;
+```

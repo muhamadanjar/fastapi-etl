@@ -1,8 +1,8 @@
-"""initial stagging
+"""initial db
 
-Revision ID: f20cfbd6c190
-Revises: 1360c94a5a9b
-Create Date: 2025-07-23 23:29:29.516197
+Revision ID: dced541d5db7
+Revises: 
+Create Date: 2025-07-26 11:11:23.178721
 
 """
 from typing import Sequence, Union
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 import sqlmodel
 
 # revision identifiers, used by Alembic.
-revision: str = 'f20cfbd6c190'
-down_revision: Union[str, None] = '1360c94a5a9b'
+revision: str = 'dced541d5db7'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -88,7 +88,7 @@ def upgrade() -> None:
     op.create_table('quality_rules',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('rule_name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
-    sa.Column('rule_type', sa.Enum('COMPLETENESS', 'UNIQUENESS', 'VALIDITY', 'CONSISTENCY', 'ACCURACY', 'TIMELINESS', 'REFERENTIAL_INTEGRITY', name='ruletype'), nullable=False),
+    sa.Column('rule_type', sa.Enum('COMPLETENESS', 'UNIQUENESS', 'VALIDITY', 'CONSISTENCY', 'ACCURACY', 'TIMELINESS', 'REFERENTIAL_INTEGRITY', name='qualityruletype'), nullable=False),
     sa.Column('entity_type', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
     sa.Column('field_name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
     sa.Column('rule_expression', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -104,6 +104,39 @@ def upgrade() -> None:
     op.create_index(op.f('ix_etl_control_quality_rules_is_active'), 'quality_rules', ['is_active'], unique=False, schema='etl_control')
     op.create_index(op.f('ix_etl_control_quality_rules_rule_name'), 'quality_rules', ['rule_name'], unique=True, schema='etl_control')
     op.create_index(op.f('ix_etl_control_quality_rules_rule_type'), 'quality_rules', ['rule_type'], unique=False, schema='etl_control')
+    op.create_table('aggregated_data',
+    sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('aggregation_name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('aggregation_type', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False),
+    sa.Column('dimension_keys', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('measure_values', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('time_period', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('batch_id', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    schema='processed'
+    )
+    op.create_index(op.f('ix_processed_aggregated_data_aggregation_name'), 'aggregated_data', ['aggregation_name'], unique=False, schema='processed')
+    op.create_index(op.f('ix_processed_aggregated_data_aggregation_type'), 'aggregated_data', ['aggregation_type'], unique=False, schema='processed')
+    op.create_index(op.f('ix_processed_aggregated_data_batch_id'), 'aggregated_data', ['batch_id'], unique=False, schema='processed')
+    op.create_index(op.f('ix_processed_aggregated_data_id'), 'aggregated_data', ['id'], unique=False, schema='processed')
+    op.create_table('entities',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('entity_type', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('entity_key', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+    sa.Column('entity_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('source_files', sa.ARRAY(sa.Integer()), nullable=True),
+    sa.Column('confidence_score', sa.Numeric(precision=3, scale=2), nullable=True),
+    sa.Column('version', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('last_updated', sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    schema='processed'
+    )
+    op.create_index(op.f('ix_processed_entities_entity_key'), 'entities', ['entity_key'], unique=False, schema='processed')
+    op.create_index(op.f('ix_processed_entities_entity_type'), 'entities', ['entity_type'], unique=False, schema='processed')
+    op.create_index(op.f('ix_processed_entities_id'), 'entities', ['id'], unique=False, schema='processed')
     op.create_table('file_registry',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('file_name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
@@ -136,6 +169,52 @@ def upgrade() -> None:
     op.create_index(op.f('ix_staging_lookup_tables_lookup_category'), 'lookup_tables', ['lookup_category'], unique=False, schema='staging')
     op.create_index(op.f('ix_staging_lookup_tables_lookup_key'), 'lookup_tables', ['lookup_key'], unique=False, schema='staging')
     op.create_index(op.f('ix_staging_lookup_tables_lookup_name'), 'lookup_tables', ['lookup_name'], unique=False, schema='staging')
+    op.create_table('field_mappings',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('source_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('source_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('target_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('target_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('mapping_type', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('mapping_expression', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('data_type', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('is_required', sa.Boolean(), nullable=False),
+    sa.Column('default_value', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    schema='transformation'
+    )
+    op.create_index(op.f('ix_transformation_field_mappings_id'), 'field_mappings', ['id'], unique=False, schema='transformation')
+    op.create_table('transformation_rules',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('rule_name', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('source_format', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('target_format', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('transformation_type', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('rule_logic', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('rule_parameters', sa.JSON(), nullable=True),
+    sa.Column('priority', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    schema='transformation'
+    )
+    op.create_index(op.f('ix_transformation_transformation_rules_id'), 'transformation_rules', ['id'], unique=False, schema='transformation')
+    op.create_table('users',
+    sa.Column('username', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('email', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('full_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('is_superuser', sa.Boolean(), nullable=False),
+    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('password', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.Column('last_login', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index(op.f('ix_users_username'), 'users', ['username'], unique=True)
     op.create_table('job_executions',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('job_id', sa.Uuid(), nullable=False),
@@ -158,6 +237,20 @@ def upgrade() -> None:
     op.create_index(op.f('ix_etl_control_job_executions_id'), 'job_executions', ['id'], unique=False, schema='etl_control')
     op.create_index(op.f('ix_etl_control_job_executions_job_id'), 'job_executions', ['job_id'], unique=False, schema='etl_control')
     op.create_index(op.f('ix_etl_control_job_executions_status'), 'job_executions', ['status'], unique=False, schema='etl_control')
+    op.create_table('entity_relationships',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('entity_from', sa.Uuid(), nullable=False),
+    sa.Column('entity_to', sa.Uuid(), nullable=False),
+    sa.Column('relationship_type', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+    sa.Column('relationship_strength', sa.Numeric(precision=3, scale=2), nullable=True),
+    sa.Column('relationship_metadata', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['entity_from'], ['processed.entities.id'], ),
+    sa.ForeignKeyConstraint(['entity_to'], ['processed.entities.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    schema='processed'
+    )
+    op.create_index(op.f('ix_processed_entity_relationships_id'), 'entity_relationships', ['id'], unique=False, schema='processed')
     op.create_table('column_structure',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('file_id', sa.Uuid(), nullable=False),
@@ -210,7 +303,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_audit_data_lineage_id'), 'data_lineage', ['id'], unique=False, schema='audit')
     op.create_table('quality_check_results',
-    sa.Column('check_result', sa.Enum('PASS', 'FAIL', 'WARNING', 'SKIP', 'ERROR', name='checkresult'), nullable=False),
+    sa.Column('check_result', sa.Enum('PASS', 'FAIL', 'WARNING', 'SKIP', 'ERROR', name='qualitycheckresult'), nullable=False),
     sa.Column('records_checked', sa.Integer(), nullable=True),
     sa.Column('records_passed', sa.Integer(), nullable=True),
     sa.Column('records_failed', sa.Integer(), nullable=True),
@@ -269,11 +362,20 @@ def downgrade() -> None:
     op.drop_table('raw_records', schema='raw_data')
     op.drop_index(op.f('ix_raw_data_column_structure_id'), table_name='column_structure', schema='raw_data')
     op.drop_table('column_structure', schema='raw_data')
+    op.drop_index(op.f('ix_processed_entity_relationships_id'), table_name='entity_relationships', schema='processed')
+    op.drop_table('entity_relationships', schema='processed')
     op.drop_index(op.f('ix_etl_control_job_executions_status'), table_name='job_executions', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_job_executions_job_id'), table_name='job_executions', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_job_executions_id'), table_name='job_executions', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_job_executions_batch_id'), table_name='job_executions', schema='etl_control')
     op.drop_table('job_executions', schema='etl_control')
+    op.drop_index(op.f('ix_users_username'), table_name='users')
+    op.drop_index(op.f('ix_users_email'), table_name='users')
+    op.drop_table('users')
+    op.drop_index(op.f('ix_transformation_transformation_rules_id'), table_name='transformation_rules', schema='transformation')
+    op.drop_table('transformation_rules', schema='transformation')
+    op.drop_index(op.f('ix_transformation_field_mappings_id'), table_name='field_mappings', schema='transformation')
+    op.drop_table('field_mappings', schema='transformation')
     op.drop_index(op.f('ix_staging_lookup_tables_lookup_name'), table_name='lookup_tables', schema='staging')
     op.drop_index(op.f('ix_staging_lookup_tables_lookup_key'), table_name='lookup_tables', schema='staging')
     op.drop_index(op.f('ix_staging_lookup_tables_lookup_category'), table_name='lookup_tables', schema='staging')
@@ -282,6 +384,15 @@ def downgrade() -> None:
     op.drop_table('lookup_tables', schema='staging')
     op.drop_index(op.f('ix_raw_data_file_registry_id'), table_name='file_registry', schema='raw_data')
     op.drop_table('file_registry', schema='raw_data')
+    op.drop_index(op.f('ix_processed_entities_id'), table_name='entities', schema='processed')
+    op.drop_index(op.f('ix_processed_entities_entity_type'), table_name='entities', schema='processed')
+    op.drop_index(op.f('ix_processed_entities_entity_key'), table_name='entities', schema='processed')
+    op.drop_table('entities', schema='processed')
+    op.drop_index(op.f('ix_processed_aggregated_data_id'), table_name='aggregated_data', schema='processed')
+    op.drop_index(op.f('ix_processed_aggregated_data_batch_id'), table_name='aggregated_data', schema='processed')
+    op.drop_index(op.f('ix_processed_aggregated_data_aggregation_type'), table_name='aggregated_data', schema='processed')
+    op.drop_index(op.f('ix_processed_aggregated_data_aggregation_name'), table_name='aggregated_data', schema='processed')
+    op.drop_table('aggregated_data', schema='processed')
     op.drop_index(op.f('ix_etl_control_quality_rules_rule_type'), table_name='quality_rules', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_quality_rules_rule_name'), table_name='quality_rules', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_quality_rules_is_active'), table_name='quality_rules', schema='etl_control')
