@@ -41,18 +41,18 @@ class DatabaseManager:
     def _get_database_config(self) -> dict:
         """Get database configuration based on URL."""
         config = {
-            "echo": self.settings.DATABASE_ECHO,
-            "pool_size": self.settings.DATABASE_POOL_SIZE,
-            "max_overflow": self.settings.DATABASE_MAX_OVERFLOW,
-            "pool_timeout": self.settings.DATABASE_POOL_TIMEOUT,
-            "pool_recycle": self.settings.DATABASE_POOL_RECYCLE,
+            "echo": self.settings.database_echo,
+            "pool_size": self.settings.database_pool_size,
+            "max_overflow": self.settings.database_max_overflow,
+            "pool_timeout": self.settings.database_pool_timeout,
+            "pool_recycle": self.settings.database_pool_recycle,
             "pool_pre_ping": True,
         }
         
         # SQLite specific configuration
-        if "sqlite" in self.settings.DATABASE_URL:
+        if "sqlite" in self.settings.database_url:
             config["connect_args"] = {"check_same_thread": False}
-            if ":memory:" in self.settings.DATABASE_URL:
+            if ":memory:" in self.settings.database_url:
                 config["poolclass"] = StaticPool
             else:
                 config["poolclass"] = QueuePool
@@ -67,11 +67,11 @@ class DatabaseManager:
             config = self._get_database_config()
             
             engine = create_engine(
-                self.settings.DATABASE_URL,
+                self.settings.database_url,
                 **config
             )
             
-            logger.info(f"Sync database engine created: {self.settings.DATABASE_URL}")
+            logger.info(f"Sync database engine created: {self.settings.database_url}")
             return engine
             
         except Exception as e:
@@ -82,7 +82,7 @@ class DatabaseManager:
         """Create asynchronous database engine."""
         try:
             # Convert sync URL to async URL if needed
-            async_url = self._convert_to_async_url(self.settings.DATABASE_URL)
+            async_url = self._convert_to_async_url(self.settings.database_url)
             
             # Remove sync-specific configs for async engine
             config = self._get_database_config()

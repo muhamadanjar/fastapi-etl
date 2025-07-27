@@ -142,8 +142,18 @@ class Settings(BaseSettings):
     VERSION: str = Field(default="1.0.0", env="VERSION")
     DEBUG: bool = Field(default=True, env="DEBUG")
     ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
+    HOST: str = Field(default="localhost", env="HOST")
+    PORT: int = Field(default=8000, env="PORT")
+
     redis_url: Optional[str] = Field(env="REDIS_URL", default=None)
     database_url: str = Field(default="postgresql://user:password@db:5432/etl_db", env="DATABASE_URL")
+    database_echo: bool = Field(default=False, env="DATABASE_ECHO")
+    database_pool_size: int = Field(default=5, env="DATABASE_POOL_SIZE")
+    database_max_overflow: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
+    database_pool_timeout: int = Field(default=30, env="DATABASE_POOL_TIMEOUT")
+    database_pool_recycle: int = Field(default=1800, env="DATABASE_POOL_RECYCLE")
+    
+
     
     rabbitmq_settings: Optional[RabbitMqSettings] = Field(default_factory=RabbitMqSettings)
     # email_settings: Optional[EmailSettings] = EmailSettings()

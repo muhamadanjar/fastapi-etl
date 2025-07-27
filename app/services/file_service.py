@@ -1,319 +1,457 @@
 """
-File service for handling file upload, processing, and management.
+File service untuk mengelola upload, processing, dan management file.
 """
 
 import os
-import hashlib
-import mimetypes
-from typing import Dict, Any, List, Optional, BinaryIO
+import json
+import uuid
+import shutil
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
+from fastapi import UploadFile, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_
-from fastapi import UploadFile
+from sqlalchemy import select, and_, or_
+from uuid import UUID
+
 from app.services.base import BaseService
+from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
+from app.infrastructure.db.models.raw_data.raw_records import RawRecords
+from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
+from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
 from app.core.exceptions import FileError, ServiceError
-from app.core.constants import UPLOAD_DIRECTORY, ALLOWED_FILE_TYPES, MAX_FILE_SIZE
-from app.utils.file_utils import get_file_extension, sanitize_filename
-from app.processors import get_processor
+from app.core.enums import ProcessingStatus, FileTypeEnum
+from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
+from app.utils.date_utils import get_current_timestamp
+from app.processors.csv_processor import CSVProcessor
+from app.processors.excel_processor import ExcelProcessor
+from app.processors.json_processor import JSONProcessor
+from app.processors.xml_processor import XMLProcessor
 
 
 class FileService(BaseService):
-    """Service for handling file operations."""
+    """Service untuk mengelola file operations."""
     
     def __init__(self, db_session: Session):
         super().__init__(db_session)
-        self.upload_dir = Path(UPLOAD_DIRECTORY)
+        self.upload_dir = Path("storage/uploads")
+        self.processed_dir = Path("storage/processed")
         self.upload_dir.mkdir(parents=True, exist_ok=True)
+        self.processed_dir.mkdir(parents=True, exist_ok=True)
     
     def get_service_name(self) -> str:
         return "FileService"
     
-    async def upload_file(self, file: UploadFile, user_id: int, batch_id: str = None) -> Dict[str, Any]:
-        """Upload and register a new file."""
+    async def upload_file(
+        self, 
+        file: UploadFile, 
+        source_system: str, 
+        batch_id: Optional[str] = None,
+        metadata: Optional[str] = None,
+        user_id: UUID = None
+    ) -> FileUploadResponse:
+        """Upload file dan simpan metadata."""
         try:
-            self.log_operation("upload_file", {"filename": file.filename, "user_id": user_id})
+            self.log_operation("upload_file", {"filename": file.filename, "source_system": source_system})
             
             # Validate file
-            await self._validate_file(file)
+            if not file.filename:
+                raise FileError("Filename is required")
+            
+            file_type = get_file_type(file.content_type)
+            if not file_type:
+                raise FileError(f"File type {file.content_type} not supported")
             
             # Generate unique filename
-            safe_filename = sanitize_filename(file.filename)
-            file_extension = get_file_extension(safe_filename)
-            unique_filename = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{safe_filename}"
-            
-            # Save file to disk
+            file_id = str(uuid.uuid4())
+            file_extension = Path(file.filename).suffix
+            unique_filename = f"{file_id}{file_extension}"
             file_path = self.upload_dir / unique_filename
-            file_content = await file.read()
             
-            with open(file_path, "wb") as f:
-                f.write(file_content)
+            # Save file to storage
+            file_size = await self._save_uploaded_file(file, file_path)
             
-            # Calculate file hash
-            file_hash = hashlib.sha256(file_content).hexdigest()
+            # Validate file size
+            validate_file_size(file_size)
             
-            # Get file metadata
-            file_size = len(file_content)
-            file_type = self._detect_file_type(file.filename, file.content_type)
+            # Parse metadata
+            parsed_metadata = {}
+            if metadata:
+                try:
+                    parsed_metadata = json.loads(metadata)
+                except json.JSONDecodeError:
+                    raise FileError("Invalid metadata JSON format")
             
-            # Register file in database
-            file_registry = await self._create_file_registry({
-                "file_name": safe_filename,
-                "file_path": str(file_path),
-                "file_type": file_type,
-                "file_size": file_size,
-                "source_system": "WEB_UPLOAD",
-                "upload_date": datetime.utcnow(),
-                "processing_status": "PENDING",
-                "batch_id": batch_id or self._generate_batch_id(),
-                "created_by": str(user_id),
-                "metadata": {
-                    "original_filename": file.filename,
-                    "content_type": file.content_type,
-                    "file_hash": file_hash
-                }
-            })
+            # Generate batch_id if not provided
+            if not batch_id:
+                batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
             
-            return {
-                "file_id": file_registry.file_id,
-                "file_name": file_registry.file_name,
-                "file_type": file_registry.file_type,
-                "file_size": file_registry.file_size,
-                "batch_id": file_registry.batch_id,
-                "status": "uploaded"
-            }
+            # Create file registry record
+            file_registry = FileRegistry(
+                file_name=file.filename,
+                file_path=str(file_path),
+                file_type=file_type.value,
+                file_size=file_size,
+                source_system=source_system,
+                processing_status=ProcessingStatus.PENDING.value,
+                batch_id=batch_id,
+                created_by=str(user_id) if user_id else None,
+                metadata=parsed_metadata
+            )
+            
+            self.db_session.add(file_registry)
+            self.db_session.commit()
+            self.db_session.refresh(file_registry)
+            
+            return FileUploadResponse(
+                file_id=file_registry.file_id,
+                file_name=file_registry.file_name,
+                file_type=file_registry.file_type,
+                file_size=file_registry.file_size,
+                source_system=file_registry.source_system,
+                batch_id=file_registry.batch_id,
+                processing_status=file_registry.processing_status,
+                upload_date=file_registry.upload_date,
+                message="File uploaded successfully"
+            )
             
         except Exception as e:
+            self.db_session.rollback()
+            # Clean up file if database operation fails
+            if 'file_path' in locals() and file_path.exists():
+                file_path.unlink()
             self.handle_error(e, "upload_file")
     
-    async def process_file(self, file_id: int) -> Dict[str, Any]:
-        """Process uploaded file and extract data."""
+    async def get_file_list(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        file_type: Optional[str] = None,
+        source_system: Optional[str] = None,
+        status: Optional[str] = None,
+        batch_id: Optional[str] = None
+    ) -> List[FileListResponse]:
+        """Get list of files dengan filtering dan pagination."""
         try:
-            self.log_operation("process_file", {"file_id": file_id})
+            self.log_operation("get_file_list", {
+                "skip": skip, "limit": limit, "file_type": file_type,
+                "source_system": source_system, "status": status, "batch_id": batch_id
+            })
             
-            # Get file registry
-            file_registry = await self._get_file_registry(file_id)
-            if not file_registry:
-                raise FileError("File not found")
+            stmt = select(FileRegistry)
             
-            # Update status to processing
-            await self._update_file_status(file_id, "PROCESSING")
+            # Apply filters
+            if file_type:
+                stmt = stmt.where(FileRegistry.file_type == file_type)
+            if source_system:
+                stmt = stmt.where(FileRegistry.source_system == source_system)
+            if status:
+                stmt = stmt.where(FileRegistry.processing_status == status)
+            if batch_id:
+                stmt = stmt.where(FileRegistry.batch_id == batch_id)
             
-            # Get appropriate processor
-            processor = get_processor(file_registry.file_type)
-            if not processor:
-                raise FileError(f"No processor available for file type: {file_registry.file_type}")
+            stmt = stmt.order_by(FileRegistry.upload_date.desc()).offset(skip).limit(limit)
+            files = self.db_session.execute(stmt).scalars().all()
             
-            # Process file
-            processing_result = await processor.process_file(file_registry.file_path)
-            
-            # Save raw records
-            records_saved = await self._save_raw_records(file_id, processing_result)
-            
-            # Update file status
-            await self._update_file_status(file_id, "COMPLETED")
-            
-            return {
-                "file_id": file_id,
-                "records_processed": len(processing_result.get("records", [])),
-                "records_saved": records_saved,
-                "columns_detected": processing_result.get("columns", []),
-                "status": "completed"
-            }
-            
-        except Exception as e:
-            await self._update_file_status(file_id, "FAILED", str(e))
-            self.handle_error(e, "process_file")
-    
-    async def get_file_info(self, file_id: int) -> Dict[str, Any]:
-        """Get file information and processing status."""
-        try:
-            file_registry = await self._get_file_registry(file_id)
-            if not file_registry:
-                raise FileError("File not found")
-            
-            # Get record count
-            record_count = await self._get_file_record_count(file_id)
-            
-            return {
-                "file_id": file_registry.file_id,
-                "file_name": file_registry.file_name,
-                "file_type": file_registry.file_type,
-                "file_size": file_registry.file_size,
-                "source_system": file_registry.source_system,
-                "upload_date": file_registry.upload_date,
-                "processing_status": file_registry.processing_status,
-                "batch_id": file_registry.batch_id,
-                "record_count": record_count,
-                "metadata": file_registry.metadata
-            }
-            
-        except Exception as e:
-            self.handle_error(e, "get_file_info")
-    
-    async def get_file_list(self, batch_id: str = None, status: str = None) -> List[Dict[str, Any]]:
-        """Get list of files with optional filtering."""
-        try:
-            self.log_operation("get_file_list", {"batch_id": batch_id, "status": status})
-            
-            files = await self._get_file_list(batch_id, status)
-            
-            result = []
-            for file_registry in files:
-                record_count = await self._get_file_record_count(file_registry.file_id)
-                result.append({
-                    "file_id": file_registry.file_id,
-                    "file_name": file_registry.file_name,
-                    "file_type": file_registry.file_type,
-                    "file_size": file_registry.file_size,
-                    "upload_date": file_registry.upload_date,
-                    "processing_status": file_registry.processing_status,
-                    "batch_id": file_registry.batch_id,
-                    "record_count": record_count
-                })
-            
-            return result
+            return [
+                FileListResponse(
+                    file_id=file.file_id,
+                    file_name=file.file_name,
+                    file_type=file.file_type,
+                    file_size=file.file_size,
+                    source_system=file.source_system,
+                    processing_status=file.processing_status,
+                    batch_id=file.batch_id,
+                    upload_date=file.upload_date
+                ) for file in files
+            ]
             
         except Exception as e:
             self.handle_error(e, "get_file_list")
     
-    async def delete_file(self, file_id: int) -> bool:
-        """Delete file and its records."""
+    async def get_file_detail(self, file_id: int) -> Optional[FileDetailResponse]:
+        """Get detailed information tentang file."""
         try:
-            self.log_operation("delete_file", {"file_id": file_id})
+            self.log_operation("get_file_detail", {"file_id": file_id})
             
-            # Get file registry
-            file_registry = await self._get_file_registry(file_id)
+            file_registry = self.db_session.get(FileRegistry, file_id)
+            if not file_registry:
+                return None
+            
+            # Get raw records count
+            raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)
+            raw_records = self.db_session.execute(raw_records_stmt).scalars().all()
+            
+            # Get column structure
+            column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
+            columns = self.db_session.execute(column_structure_stmt).scalars().all()
+            
+            return FileDetailResponse(
+                file_id=file_registry.file_id,
+                file_name=file_registry.file_name,
+                file_path=file_registry.file_path,
+                file_type=file_registry.file_type,
+                file_size=file_registry.file_size,
+                source_system=file_registry.source_system,
+                processing_status=file_registry.processing_status,
+                batch_id=file_registry.batch_id,
+                upload_date=file_registry.upload_date,
+                created_by=file_registry.created_by,
+                metadata=file_registry.metadata,
+                records_count=len(raw_records),
+                valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
+                invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                columns=[{
+                    "name": col.column_name,
+                    "position": col.column_position,
+                    "data_type": col.data_type,
+                    "sample_values": col.sample_values,
+                    "null_count": col.null_count,
+                    "unique_count": col.unique_count
+                } for col in columns]
+            )
+            
+        except Exception as e:
+            self.handle_error(e, "get_file_detail")
+    
+    async def start_file_processing(self, file_id: int, user_id: int) -> str:
+        """Start processing file secara asynchronous."""
+        try:
+            from app.tasks.etl_tasks import process_file_task
+            
+            self.log_operation("start_file_processing", {"file_id": file_id, "user_id": user_id})
+            
+            file_registry = self.db_session.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
-            # Delete physical file
-            if os.path.exists(file_registry.file_path):
-                os.remove(file_registry.file_path)
+            if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
+                raise FileError("File is already being processed")
             
-            # Delete records
-            await self._delete_file_records(file_id)
+            if file_registry.processing_status == ProcessingStatus.COMPLETED.value:
+                raise FileError("File has already been processed")
+            
+            # Update status to processing
+            file_registry.processing_status = ProcessingStatus.PROCESSING.value
+            self.db_session.commit()
+            
+            # Start background task
+            task_result = process_file_task.delay(file_id, user_id)
+            
+            return task_result.id
+            
+        except Exception as e:
+            self.db_session.rollback()
+            self.handle_error(e, "start_file_processing")
+    
+    async def delete_file(self, file_id: int, user_id: int) -> bool:
+        """Delete file dan semua data yang terkait."""
+        try:
+            self.log_operation("delete_file", {"file_id": file_id, "user_id": user_id})
+            
+            file_registry = self.db_session.get(FileRegistry, file_id)
+            if not file_registry:
+                raise FileError("File not found")
+            
+            if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
+                raise FileError("Cannot delete file while processing")
+            
+            # Delete physical file
+            file_path = Path(file_registry.file_path)
+            if file_path.exists():
+                file_path.unlink()
+            
+            # Delete related records (cascade delete should handle this)
+            # But explicitly delete for safety
+            await self._delete_related_data(file_id)
             
             # Delete file registry
-            await self._delete_file_registry(file_id)
+            self.db_session.delete(file_registry)
+            self.db_session.commit()
             
             return True
             
         except Exception as e:
+            self.db_session.rollback()
             self.handle_error(e, "delete_file")
     
-    async def get_file_preview(self, file_id: int, limit: int = 100) -> Dict[str, Any]:
-        """Get preview of file data."""
+    async def download_file(self, file_id: int) -> FileResponse:
+        """Download original file."""
         try:
-            self.log_operation("get_file_preview", {"file_id": file_id, "limit": limit})
+            self.log_operation("download_file", {"file_id": file_id})
             
-            # Get file registry
-            file_registry = await self._get_file_registry(file_id)
+            file_registry = self.db_session.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
-            # Get sample records
-            records = await self._get_file_records(file_id, limit)
+            file_path = Path(file_registry.file_path)
+            if not file_path.exists():
+                raise FileError("Physical file not found")
             
-            # Get column structure
-            columns = await self._get_file_columns(file_id)
+            return FileResponse(
+                path=str(file_path),
+                filename=file_registry.file_name,
+                media_type='application/octet-stream'
+            )
+            
+        except Exception as e:
+            self.handle_error(e, "download_file")
+    
+    async def preview_file_data(self, file_id: int, rows: int = 10) -> Dict[str, Any]:
+        """Preview file data (first N rows)."""
+        try:
+            self.log_operation("preview_file_data", {"file_id": file_id, "rows": rows})
+            
+            file_registry = self.db_session.get(FileRegistry, file_id)
+            if not file_registry:
+                raise FileError("File not found")
+            
+            file_path = Path(file_registry.file_path)
+            if not file_path.exists():
+                raise FileError("Physical file not found")
+            
+            # Get appropriate processor
+            processor = self._get_processor(file_registry.file_type)
+            
+            # Preview data
+            preview_data = await processor.preview_data(str(file_path), rows)
             
             return {
                 "file_id": file_id,
                 "file_name": file_registry.file_name,
-                "columns": columns,
-                "records": records,
-                "total_records": await self._get_file_record_count(file_id)
+                "file_type": file_registry.file_type,
+                "preview_rows": rows,
+                "data": preview_data
             }
             
         except Exception as e:
-            self.handle_error(e, "get_file_preview")
+            self.handle_error(e, "preview_file_data")
+    
+    async def batch_upload(
+        self,
+        files: List[UploadFile],
+        source_system: str,
+        batch_id: Optional[str] = None,
+        user_id: int = None
+    ) -> Dict[str, Any]:
+        """Upload multiple files dalam satu batch."""
+        try:
+            self.log_operation("batch_upload", {
+                "files_count": len(files), 
+                "source_system": source_system,
+                "batch_id": batch_id
+            })
+            
+            if not batch_id:
+                batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+            
+            results = []
+            success_count = 0
+            error_count = 0
+            
+            for file in files:
+                try:
+                    result = await self.upload_file(file, source_system, batch_id, None, user_id)
+                    results.append({
+                        "file_name": file.filename,
+                        "status": "success",
+                        "file_id": result.file_id,
+                        "message": "Uploaded successfully"
+                    })
+                    success_count += 1
+                except Exception as e:
+                    results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "file_id": None,
+                        "message": str(e)
+                    })
+                    error_count += 1
+            
+            return {
+                "batch_id": batch_id,
+                "total_files": len(files),
+                "success_count": success_count,
+                "error_count": error_count,
+                "results": results
+            }
+            
+        except Exception as e:
+            self.handle_error(e, "batch_upload")
+    
+    async def process_file_content(self, file_id: int) -> Dict[str, Any]:
+        """Process file content dan extract data."""
+        try:
+            self.log_operation("process_file_content", {"file_id": file_id})
+            
+            file_registry = self.db_session.get(FileRegistry, file_id)
+            if not file_registry:
+                raise FileError("File not found")
+            
+            file_path = Path(file_registry.file_path)
+            if not file_path.exists():
+                raise FileError("Physical file not found")
+            
+            # Get appropriate processor
+            processor = self._get_processor(file_registry.file_type)
+            
+            # Process file
+            processing_result = await processor.process_file(str(file_path), file_id, file_registry.batch_id)
+            
+            # Update processing status
+            file_registry.processing_status = ProcessingStatus.COMPLETED.value
+            self.db_session.commit()
+            
+            return processing_result
+            
+        except Exception as e:
+            self.db_session.rollback()
+            # Update status to failed
+            file_registry = self.db_session.get(FileRegistry, file_id)
+            if file_registry:
+                file_registry.processing_status = ProcessingStatus.FAILED.value
+                self.db_session.commit()
+            
+            self.handle_error(e, "process_file_content")
     
     # Private helper methods
-    async def _validate_file(self, file: UploadFile):
-        """Validate uploaded file."""
-        if not file.filename:
-            raise FileError("No filename provided")
-        
-        # Check file extension
-        file_extension = get_file_extension(file.filename).lower()
-        if file_extension not in ALLOWED_FILE_TYPES:
-            raise FileError(f"File type not allowed: {file_extension}")
-        
-        # Check file size
-        file_content = await file.read()
-        if len(file_content) > MAX_FILE_SIZE:
-            raise FileError(f"File too large: {len(file_content)} bytes")
-        
-        # Reset file pointer
-        await file.seek(0)
+    async def _save_uploaded_file(self, file: UploadFile, file_path: Path) -> int:
+        """Save uploaded file to storage."""
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            return file_path.stat().st_size
+        except Exception as e:
+            if file_path.exists():
+                file_path.unlink()
+            raise FileError(f"Failed to save file: {str(e)}")
     
-    def _detect_file_type(self, filename: str, content_type: str) -> str:
-        """Detect file type from filename and content type."""
-        extension = get_file_extension(filename).lower()
-        
-        type_mapping = {
-            '.csv': 'CSV',
-            '.xlsx': 'EXCEL',
-            '.xls': 'EXCEL',
-            '.json': 'JSON',
-            '.xml': 'XML',
-            '.txt': 'TXT'
+    def _get_processor(self, file_type: str):
+        """Get appropriate processor based on file type."""
+        processors = {
+            FileTypeEnum.CSV.value: CSVProcessor,
+            FileTypeEnum.EXCEL.value: ExcelProcessor,
+            FileTypeEnum.JSON.value: JSONProcessor,
+            FileTypeEnum.XML.value: XMLProcessor
         }
         
-        return type_mapping.get(extension, 'UNKNOWN')
+        processor_class = processors.get(file_type)
+        if not processor_class:
+            raise FileError(f"No processor available for file type: {file_type}")
+        
+        return processor_class(self.db_session)
     
-    def _generate_batch_id(self) -> str:
-        """Generate unique batch ID."""
-        return f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
-    
-    # Database helper methods (implement based on your models)
-    async def _create_file_registry(self, file_data: Dict[str, Any]):
-        """Create file registry record."""
-        # Implement database insert
-        pass
-    
-    async def _get_file_registry(self, file_id: int):
-        """Get file registry by ID."""
-        # Implement database query
-        pass
-    
-    async def _update_file_status(self, file_id: int, status: str, error_message: str = None):
-        """Update file processing status."""
-        # Implement database update
-        pass
-    
-    async def _save_raw_records(self, file_id: int, processing_result: Dict[str, Any]) -> int:
-        """Save raw records to database."""
-        # Implement database insert
-        pass
-    
-    async def _get_file_record_count(self, file_id: int) -> int:
-        """Get record count for file."""
-        # Implement database query
-        pass
-    
-    async def _get_file_list(self, batch_id: str = None, status: str = None):
-        """Get file list with filters."""
-        # Implement database query
-        pass
-    
-    async def _delete_file_records(self, file_id: int):
-        """Delete all records for file."""
-        # Implement database delete
-        pass
-    
-    async def _delete_file_registry(self, file_id: int):
-        """Delete file registry record."""
-        # Implement database delete
-        pass
-    
-    async def _get_file_records(self, file_id: int, limit: int):
-        """Get file records with limit."""
-        # Implement database query
-        pass
-    
-    async def _get_file_columns(self, file_id: int):
-        """Get column structure for file."""
-        # Implement database query
-        pass
+    async def _delete_related_data(self, file_id: int):
+        """Delete all related data for a file."""
+        # Delete raw records
+        raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)
+        raw_records = self.db_session.execute(raw_records_stmt).scalars().all()
+        for record in raw_records:
+            self.db_session.delete(record)
+        
+        # Delete column structure
+        column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
+        columns = self.db_session.execute(column_structure_stmt).scalars().all()
+        for column in columns:
+            self.db_session.delete(column)

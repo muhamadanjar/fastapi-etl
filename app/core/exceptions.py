@@ -585,6 +585,29 @@ class DataTransformationException(AppException):
             status_code=500,
         )
 
+class EntityError(AppException):
+    """Exception raised for data transformation errors."""
+    
+    def __init__(
+        self,
+        message: str = "Data transformation error occurred",
+        transformation_type: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.transformation_type = transformation_type
+        
+        exception_details = details or {}
+        if transformation_type:
+            exception_details["transformation_type"] = transformation_type
+        
+        super().__init__(
+            message=message,
+            error_code="ENTITY_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
+
+
 def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(
         status_code=exc.status_code,

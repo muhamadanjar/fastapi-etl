@@ -141,7 +141,7 @@ def create_application() -> FastAPI:
             status_code=exc.status_code,
             content={
                 "error": {
-                    "type": exc.error_type,
+                    "type": exc.error_code,
                     "message": exc.message,
                     "details": exc.details,
                 }

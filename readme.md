@@ -237,3 +237,17 @@ create schema raw_data;
 create schema staging;
 create schema transformation;
 ```
+
+## Migrate DB
+```bash
+alembic upgrade head
+```
+
+# Run
+```bash
+python -m app.main
+```
+### _OR_
+```bash
+python -m uvicorn app.main:app --reload
+```

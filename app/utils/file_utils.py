@@ -33,6 +33,34 @@ SUPPORTED_FILE_TYPES = {
     'ARCHIVE': ['.zip', '.tar', '.tar.gz', '.tar.bz2', '.rar']
 }
 
+SUPPORTED_MIME_TYPES = {
+    "image": [
+        "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"
+    ],
+    "video": [
+        "video/mp4", "video/mpeg", "video/quicktime", "video/x-msvideo"
+    ],
+    "audio": [
+        "audio/mpeg", "audio/wav", "audio/ogg"
+    ],
+    "document": [
+        "application/pdf", "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ],
+    "spreadsheet": [
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv"
+    ],
+    "archive": [
+        "application/zip", "application/x-tar",
+        "application/x-rar-compressed", "application/gzip"
+    ],
+    "text": [
+        "text/plain", "text/html", "text/css", "text/markdown"
+    ],
+}
+
 # Maximum file sizes (in bytes)
 MAX_FILE_SIZES = {
     'CSV': 500 * 1024 * 1024,      # 500MB
@@ -288,6 +316,32 @@ def get_mime_type(file_path: Union[str, Path]) -> str:
         logger.log_error("get_mime_type", e, {"file_path": str(file_path)})
         return "application/octet-stream"
 
+
+def get_file_type(content_type: str) -> str:
+    """
+    Determine the file type based on MIME content type.
+
+    Args:
+        content_type (str): MIME type (e.g. 'image/jpeg', 'application/pdf')
+
+    Returns:
+        str: File type (e.g. 'image', 'video', 'document'), or 'UNKNOWN' if not recognized
+    """
+    try:
+        if not content_type:
+            return "UNKNOWN"
+
+        content_type = content_type.lower()
+
+        for file_type, mime_types in SUPPORTED_MIME_TYPES.items():
+            if content_type in mime_types or content_type.startswith(file_type + "/"):
+                return file_type
+
+        return "UNKNOWN"
+
+    except Exception as e:
+        logger.log_error("get_file_type", e, {"content_type": content_type})
+        return "UNKNOWN"
 
 def detect_file_type(filename: str) -> str:
     """
