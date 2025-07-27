@@ -11,10 +11,10 @@ from .entities import router as entities_router
 api_router = APIRouter()
 
 # Include all routers with prefixes
-# api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(files_router, prefix="/files", tags=["File Management"])
-# api_router.include_router(jobs_router, prefix="/jobs", tags=["ETL Jobs"])
-# api_router.include_router(monitoring_router, prefix="/monitoring", tags=["Monitoring"])
-# api_router.include_router(data_quality_router, prefix="/data-quality", tags=["Data Quality"])
-# api_router.include_router(entities_router, prefix="/entities", tags=["Entity Management"])
+api_router.include_router(jobs_router, prefix="/jobs", tags=["ETL Jobs"])
+api_router.include_router(monitoring_router, prefix="/monitoring", tags=["Monitoring"])
+api_router.include_router(data_quality_router, prefix="/data-quality", tags=["Data Quality"])
+api_router.include_router(entities_router, prefix="/entities", tags=["Entity Management"])
 # api_router.include_router(reports_router, prefix="/reports", tags=["Reports"])
