@@ -16,7 +16,7 @@ from app.core.exceptions import (
     AuthorizationException
 )
 from app.utils.logger import get_logger
-from app.utils.notification_service import NotificationService
+from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 

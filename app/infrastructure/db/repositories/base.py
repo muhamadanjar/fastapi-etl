@@ -1,10 +1,11 @@
 import logging
+from math import ceil
 from typing import Generic, TypeVar, Type, Optional, List, Dict, Any, Union
 from uuid import UUID
 
 from sqlmodel import SQLModel, Session, select, delete, update
 from sqlmodel import and_, asc, desc, inspect, or_, select, func
-# from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import SQLAlchemyError
 
 from ....core.exceptions import DatabaseError, NotFoundError
@@ -342,7 +343,7 @@ class BaseRepository(Generic[ModelType]):
             True if exists, False otherwise
         """
         try:
-            statement = select(self.model.id).where(self.model.id == id)
+            statement = select(self.model).where(self.model.id == id)
             result = self.session.exec(statement)
             return result.first() is not None
             
@@ -350,7 +351,34 @@ class BaseRepository(Generic[ModelType]):
             logger.error(f"Failed to check {self.model.__name__} existence {id}: {e}")
             raise DatabaseError(f"Failed to check {self.model.__name__} existence: {str(e)}")
     
+    async def get_or_create(self, defaults=None, **kwargs):
+        stmt = select(self.model).where(*[getattr(self.model, k) == v for k, v in kwargs.items()])
+        instance = await self.session.exec(stmt).first()
+        if instance:
+            return instance, False
+        params = {**kwargs, **(defaults or {})}
+        instance = self.model(**params)
+        self.session.add(instance)
+        await self.session.commit()
+        await self.session.refresh(instance)
+        return instance, True
+ 
 
+    async def update_or_create(self, defaults=None, **kwargs):
+        stmt = select(self.model).where(*[getattr(self.model, k) == v for k, v in kwargs.items()])
+        instance = await self.session.exec(stmt).first()
+        if instance:
+            for key, value in (defaults or {}).items():
+                setattr(instance, key, value)
+            self.session.add(instance)
+            await self.session.commit()
+            return instance, False
+        params = {**kwargs, **(defaults or {})}
+        instance = self.model(**params)
+        self.session.add(instance)
+        await self.session.commit()
+        await self.session.refresh(instance)
+        return instance, True
 
     def _get_column_by_path(self, path: str):
         """Get column from nested path like 'user.email'."""
@@ -620,7 +648,6 @@ class BaseRepository(Generic[ModelType]):
         
         return query
     
-
     async def count_filtered(
         self,
         criteria: Optional[Dict[str, Any]] = None
@@ -796,4 +823,3 @@ class BaseRepository(Generic[ModelType]):
         except ValueError as e:
             logger.error(f"Invalid cursor pagination parameters: {e}")
 
-# Dari root directory proyek

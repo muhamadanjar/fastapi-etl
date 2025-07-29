@@ -129,7 +129,7 @@ class BaseProcessor(ABC):
                     
                     # Create raw record
                     raw_record = RawRecords(
-                        file_id=file_registry.file_id,
+                        file_id=file_registry.id,
                         row_number=row_number,
                         raw_data=record,
                         data_hash=record_hash,
@@ -187,7 +187,7 @@ class BaseProcessor(ABC):
         try:
             for position, column_info in enumerate(columns):
                 column_structure = ColumnStructure(
-                    file_id=file_registry.file_id,
+                    file_id=file_registry.id,
                     column_name=column_info.get("name", f"column_{position}"),
                     column_position=position,
                     data_type=column_info.get("data_type", "STRING"),

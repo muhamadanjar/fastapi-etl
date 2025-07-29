@@ -30,9 +30,11 @@ class EntityRelationship(EntityRelationshipBase, table=True):
     # Relationships - akan digunakan jika diperlukan joins
     from_entity: Optional["Entity"] = Relationship(
         back_populates="relationships_from",
+        sa_relationship_kwargs={"foreign_keys": "[EntityRelationship.entity_from]"},
     )
     to_entity: Optional["Entity"] = Relationship(
         back_populates="relationships_to",
+        sa_relationship_kwargs={"foreign_keys": "[EntityRelationship.entity_to]"},
     )
     
     class Config:

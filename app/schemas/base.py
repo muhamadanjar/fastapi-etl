@@ -12,15 +12,19 @@ class BaseResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
+class PaginatedMetaDataResponse(BaseModel):
+    total_pages: int
+    total: int
+    page: int
+    per_page: int
+    has_next: Optional[bool] = Field(description="Whether there are more pages")
+    has_prev: Optional[bool] = Field(description="Whether there are previous pages")
+
+
 class PaginatedResponse(BaseModel, Generic[T]):
     """Paginated response schema."""
-    items: List[T]
-    total: int
-    page: int = Field(ge=1, description="Current page number")
-    size: int = Field(ge=1, le=100, description="Number of items per page")
-    pages: int = Field(ge=1, description="Total number of pages")
-    has_next: bool = Field(description="Whether there are more pages")
-    has_prev: bool = Field(description="Whether there are previous pages")
+    data: List[T]
+    metas: Optional[PaginatedMetaDataResponse] = None
 
 
 class ErrorResponse(BaseResponse):

@@ -684,10 +684,10 @@ async def _check_external_dependencies() -> Dict[str, Any]:
     overall_status = 'healthy'
     
     # Check Redis (if used)
-    if hasattr(settings, 'REDIS_URL') and settings.REDIS_URL:
+    if hasattr(settings, 'REDIS_URL') and settings.redis_settings.url:
         try:
             import redis
-            r = redis.from_url(settings.REDIS_URL)
+            r = redis.from_url(settings.redis_settings.url)
             r.ping()
             dependencies['redis'] = {'status': 'healthy', 'response_time_ms': 0}
         except Exception as e:

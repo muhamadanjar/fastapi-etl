@@ -51,7 +51,7 @@ async def process_file_task(self, file_id: str, processing_config: Dict[str, Any
     db = next(get_db())
     try:
         # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.file_id == file_id)).first()
+        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
         if not file_record:
             raise FileProcessingException(f"File record not found: {file_id}")
         
@@ -592,7 +592,7 @@ def cleanup_old_files(self, days_old: int = 30, file_types: List[str] = None):
                 db.add(file_record)
                 
             except Exception as e:
-                error_msg = f"Failed to delete file {file_record.file_id}: {str(e)}"
+                error_msg = f"Failed to delete file {file_record.id}: {str(e)}"
                 cleanup_results['errors'].append(error_msg)
                 logger.warning(error_msg)
         
@@ -930,7 +930,7 @@ async def validate_file_format_task(self, file_id: str):
     db = next(get_db())
     try:
         # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.file_id == file_id)).first()
+        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
         if not file_record:
             raise FileProcessingException(f"File record not found: {file_id}")
         
@@ -992,7 +992,7 @@ async def preview_file_data_task(self, file_id: str, rows: int = 10):
     db = next(get_db())
     try:
         # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.file_id == file_id)).first()
+        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
         if not file_record:
             raise FileProcessingException(f"File record not found: {file_id}")
         

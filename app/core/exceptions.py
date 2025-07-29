@@ -607,6 +607,27 @@ class EntityError(AppException):
             status_code=500,
         )
 
+class ETLException(AppException):
+    """Exception raised for ETL-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "ETL error occurred",
+        operation: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.operation = operation
+        
+        exception_details = details or {}
+        if operation:
+            exception_details["operation"] = operation
+        
+        super().__init__(
+            message=message,
+            error_code="ETL_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
 
 def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(

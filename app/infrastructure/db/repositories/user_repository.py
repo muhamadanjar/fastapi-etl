@@ -594,3 +594,4 @@ class UserProfileRepository(BaseRepository[UserProfile]):
         except Exception as e:
             logger.error(f"Failed to create/update profile for user {user_id}: {e}")
             raise DatabaseError(f"Failed to create/update profile: {str(e)}")
+            

@@ -46,7 +46,7 @@ async def upload_file(
         user_id=current_user.id
     )
 
-@router.get("/", response_model=List[FileListResponse])
+@router.get("/", response_model=FileListResponse)
 async def list_files(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
@@ -56,7 +56,7 @@ async def list_files(
     batch_id: Optional[str] = Query(None, description="Filter by batch ID"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> List[FileListResponse]:
+) -> FileListResponse:
     """List uploaded files with pagination and filters"""
     file_service = FileService(db)
     return await file_service.get_file_list(

@@ -47,10 +47,12 @@ SUPPORTED_MIME_TYPES = {
         "application/pdf", "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ],
-    "spreadsheet": [
+    "CSV": [
+        "text/csv"
+    ],
+    "EXCEL": [
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/csv"
     ],
     "archive": [
         "application/zip", "application/x-tar",

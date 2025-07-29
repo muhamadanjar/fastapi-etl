@@ -1,12 +1,11 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from uuid import UUID
 from pydantic import BaseModel, Field
 from enum import Enum
 
 from app.core.enums import FileTypeEnum, ProcessingStatus
-from .base import BaseResponse
-
-
+from .base import BaseResponse, PaginatedMetaDataResponse
 
 
 class ValidationStatus(str, Enum):
@@ -28,7 +27,7 @@ class FileUploadRequest(BaseModel):
 
 class FileUploadResponse(BaseResponse):
     """Schema for file upload response."""
-    file_id: int
+    file_id: UUID
     file_name: str
     file_type: FileTypeEnum
     file_size: int
@@ -39,7 +38,7 @@ class FileUploadResponse(BaseResponse):
 
 class FileProcessingStatus(BaseModel):
     """Schema for file processing status."""
-    file_id: int
+    file_id: UUID
     file_name: str
     processing_status: ProcessingStatus
     progress_percentage: float = Field(ge=0, le=100, description="Processing progress percentage")
@@ -55,7 +54,7 @@ class FileProcessingStatus(BaseModel):
 
 class FileMetadata(BaseModel):
     """Schema for file metadata."""
-    file_id: int
+    file_id: UUID
     file_name: str
     file_path: str
     file_type: FileTypeEnum
@@ -64,7 +63,7 @@ class FileMetadata(BaseModel):
     upload_date: datetime
     processing_status: ProcessingStatus
     batch_id: str
-    created_by: str
+    created_by: UUID
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -156,11 +155,8 @@ class FileExportResponse(BaseResponse):
 
 class FileListResponse(BaseResponse):
     """Schema for file list response."""
-    files: List[FileMetadata]
-    total_files: int
-    page: int = Field(default=1, ge=1)
-    size: int = Field(default=10, ge=1, le=100)
-    total_pages: int = Field(default=1, ge=1)
+    data: List[FileMetadata]
+    metas: Optional[PaginatedMetaDataResponse] = None
 
 class FileDetailResponse(BaseResponse):
     """Schema for file detail response."""

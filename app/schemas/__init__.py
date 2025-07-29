@@ -1,5 +1,5 @@
 from .base import BaseResponse, PaginatedResponse, ErrorResponse
-from .auth import UserLogin, UserCreate, UserRead, Token, TokenData
+from .auth import UserCreate, UserRead, Token, TokenData
 from .file_upload import FileUploadResponse, FileUploadRequest, FileProcessingStatus
 from .job_schemas import (
     JobCreate, JobRead, JobUpdate, JobExecutionCreate, 
@@ -23,7 +23,7 @@ __all__ = [
     "BaseResponse", "PaginatedResponse", "ErrorResponse",
     
     # Auth schemas
-    "UserLogin", "UserCreate", "UserRead", "Token", "TokenData",
+    "UserCreate", "UserRead", "Token", "TokenData",
     
     # File upload schemas
     "FileUploadResponse", "FileUploadRequest", "FileProcessingStatus",

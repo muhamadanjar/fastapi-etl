@@ -55,6 +55,7 @@ class EtlJob(EtlJobBase, table=True):
     
     # Relationships
     executions: List["JobExecution"] = Relationship(back_populates="job")
+    # created_by_user : Optional["User"] = Relationship(back_populates="created_jobs")
     
     class Config:
         

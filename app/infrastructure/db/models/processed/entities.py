@@ -29,9 +29,11 @@ class Entity(EntityBase, table=True):
 
     relationships_from: Optional[List["EntityRelationship"]] = Relationship(
         back_populates="from_entity",
+        sa_relationship_kwargs={"foreign_keys": "[EntityRelationship.entity_from]"},
     )
     relationships_to: Optional[List["EntityRelationship"]] = Relationship(
         back_populates="to_entity",
+        sa_relationship_kwargs={"foreign_keys": "[EntityRelationship.entity_to]"},
     )
     
     class Config:

@@ -54,6 +54,13 @@ class FileRegistry(BaseModel, table=True):
         max_length=50,
         description="Batch identifier for grouping related files"
     )
+
+    created_by: Optional[UUID] = Field(
+        default=None,
+        max_length=100,
+        foreign_key="users.id",
+        description="User who uploaded the file"
+    )
     
     file_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -61,6 +68,10 @@ class FileRegistry(BaseModel, table=True):
         description="Additional metadata about the file in JSON format"
     )
     
+    uploaded_by_user: Optional["User"] = Relationship(
+        back_populates="file_uploads",
+        sa_relationship_kwargs={"lazy": "joined"}
+    )
     class Config:
         json_schema_extra = {
             "example": {
@@ -89,7 +100,7 @@ class FileRegistryCreate(SQLModel):
     file_size: Optional[int] = None
     source_system: Optional[str] = Field(default=None, max_length=100)
     batch_id: Optional[str] = Field(default=None, max_length=50)
-    created_by: Optional[str] = Field(default=None, max_length=100)
+    created_by: Optional[UUID] = Field(default=None, max_length=100)
     file_metadata: Optional[Dict[str, Any]] = None
 
 
@@ -102,7 +113,7 @@ class FileRegistryUpdate(SQLModel):
     source_system: Optional[str] = Field(default=None, max_length=100)
     processing_status: Optional[ProcessingStatus] = None
     batch_id: Optional[str] = Field(default=None, max_length=50)
-    created_by: Optional[str] = Field(default=None, max_length=100)
+    created_by: Optional[UUID] = Field(default=None, max_length=100)
     file_metadata: Optional[Dict[str, Any]] = None
 
 
@@ -117,6 +128,6 @@ class FileRegistryRead(SQLModel):
     upload_date: datetime
     processing_status: ProcessingStatus
     batch_id: Optional[str]
-    created_by: Optional[str]
+    created_by: Optional[UUID]
     file_metadata: Optional[Dict[str, Any]]
     created_at: datetime

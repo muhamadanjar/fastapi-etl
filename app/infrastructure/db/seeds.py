@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
 from .connection import database_manager
-from .models.user_model import User, UserProfile
+from app.infrastructure.db.models.auth import User, UserProfile
 from ...core.security import get_password_hash
 
 logger = logging.getLogger(__name__)

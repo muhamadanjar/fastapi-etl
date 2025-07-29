@@ -153,13 +153,11 @@ class Settings(BaseSettings):
     database_pool_timeout: int = Field(default=30, env="DATABASE_POOL_TIMEOUT")
     database_pool_recycle: int = Field(default=1800, env="DATABASE_POOL_RECYCLE")
     
-
-    
     rabbitmq_settings: Optional[RabbitMqSettings] = Field(default_factory=RabbitMqSettings)
     # email_settings: Optional[EmailSettings] = EmailSettings()
     cors_settings: Optional[CORSSettings] = Field(default_factory=CORSSettings)
     redis_settings: Optional[RedisSettings] = Field(default_factory=RedisSettings)
-    # storage_settings: Optional[StorageSettings] = StorageSettings()
+    storage_settings: Optional[StorageSettings] = StorageSettings()
     security: Optional[SecuritySettings] = Field(default_factory=SecuritySettings)
     celery_settings: Optional[CelerySettings] = Field(default_factory=CelerySettings)
     logging: Optional[LoggingSettings] = Field(default_factory=LoggingSettings)
@@ -172,10 +170,6 @@ class Settings(BaseSettings):
     max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
     model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), extra="allow", env_file_encoding="utf-8")
-
-    # class Config:
-    #     env_file = ".env"
-    #     env_file_encoding = "utf-8"
 
 
 settings = Settings()

@@ -54,21 +54,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # )
             # print("✅ Messaging system initialized")
             await redis_manager.connect()
-            # redis_cache = redis_manager.get_cache()
+            redis_cache = redis_manager.get_cache()
             
             # Initialize cache manager with Redis + Memory fallback
-            # await cache_manager.initialize(
-            #     primary_cache=redis_cache,
-            #     enable_fallback=True,
-            #     fallback_config={
-            #         'max_size': 1000,
-            #         'max_memory_mb': 50,
-            #         'default_ttl': 300,
-            #         'eviction_policy': 'lru'
-            #     },
-            #     recovery_interval=60
-            # )
-            # print("✅ Cache system initialized (Redis + Memory fallback)")
+            await cache_manager.initialize(
+                primary_cache=redis_cache,
+                enable_fallback=True,
+                fallback_config={
+                    'max_size': 1000,
+                    'max_memory_mb': 50,
+                    'default_ttl': 300,
+                    'eviction_policy': 'lru'
+                },
+                recovery_interval=60
+            )
+            print("✅ Cache system initialized (Redis + Memory fallback)")
 
             await database_manager.connect()
             print("✅ Database connection established")
@@ -125,14 +125,14 @@ def create_application() -> FastAPI:
     #         allowed_hosts=settings.ALLOWED_HOSTS
     #     )
 
-    # if settings.BACKEND_CORS_ORIGINS:
-    #     app.add_middleware(
-    #         CORSMiddleware,
-    #         allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-    #         allow_credentials=True,
-    #         allow_methods=["*"],
-    #         allow_headers=["*"],
-    #     )
+    if settings.cors_settings.allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[str(origin) for origin in settings.cors_settings.allowed_origins],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
@@ -203,7 +203,7 @@ def create_application() -> FastAPI:
             health_status["status"] = "unhealthy"
         
         # Check Redis
-        if settings.REDIS_URL:
+        if settings.redis_settings.url:
             try:
                 await redis_manager.health_check()
                 health_status["checks"]["cache"] = "healthy"
@@ -219,11 +219,6 @@ def create_application() -> FastAPI:
         app_routes,
     )
     
-    # app.include_router(
-    #     user_routes.router,
-    #     prefix="/api/v1/users",
-    #     tags=["Users"]
-    # )
 
     # @app.websocket("/ws/{client_id}")
     # async def websocket_endpoint(websocket, client_id: str):

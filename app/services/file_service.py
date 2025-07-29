@@ -2,6 +2,7 @@
 File service untuk mengelola upload, processing, dan management file.
 """
 
+from math import ceil
 import os
 import json
 import uuid
@@ -15,11 +16,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_
 from uuid import UUID
 
+from app.infrastructure.db.repositories.file_repository import FileRegistryRepository
+from app.schemas.base import PaginatedMetaDataResponse
 from app.services.base import BaseService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
-from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
+from app.schemas.file_upload import FileMetadata, FileUploadResponse, FileListResponse, FileDetailResponse
 from app.core.exceptions import FileError, ServiceError
 from app.core.enums import ProcessingStatus, FileTypeEnum
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
@@ -33,12 +36,13 @@ from app.processors.xml_processor import XMLProcessor
 class FileService(BaseService):
     """Service untuk mengelola file operations."""
     
-    def __init__(self, db_session: Session):
-        super().__init__(db_session)
+    def __init__(self, db: Session):
+        super().__init__(db)
         self.upload_dir = Path("storage/uploads")
         self.processed_dir = Path("storage/processed")
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
+        self.repo = FileRegistryRepository(db)
     
     def get_service_name(self) -> str:
         return "FileService"
@@ -60,6 +64,7 @@ class FileService(BaseService):
                 raise FileError("Filename is required")
             
             file_type = get_file_type(file.content_type)
+            print(f"Detected file type: {file_type}")
             if not file_type:
                 raise FileError(f"File type {file.content_type} not supported")
             
@@ -73,7 +78,7 @@ class FileService(BaseService):
             file_size = await self._save_uploaded_file(file, file_path)
             
             # Validate file size
-            validate_file_size(file_size)
+            validate_file_size(file_path)
             
             # Parse metadata
             parsed_metadata = {}
@@ -85,13 +90,13 @@ class FileService(BaseService):
             
             # Generate batch_id if not provided
             if not batch_id:
-                batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+                batch_id = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
             # Create file registry record
             file_registry = FileRegistry(
                 file_name=file.filename,
                 file_path=str(file_path),
-                file_type=file_type.value,
+                file_type=file_type,
                 file_size=file_size,
                 source_system=source_system,
                 processing_status=ProcessingStatus.PENDING.value,
@@ -100,12 +105,12 @@ class FileService(BaseService):
                 metadata=parsed_metadata
             )
             
-            self.db_session.add(file_registry)
-            self.db_session.commit()
-            self.db_session.refresh(file_registry)
+            self.db.add(file_registry)
+            self.db.commit()
+            self.db.refresh(file_registry)
             
             return FileUploadResponse(
-                file_id=file_registry.file_id,
+                file_id=file_registry.id,
                 file_name=file_registry.file_name,
                 file_type=file_registry.file_type,
                 file_size=file_registry.file_size,
@@ -117,7 +122,7 @@ class FileService(BaseService):
             )
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             # Clean up file if database operation fails
             if 'file_path' in locals() and file_path.exists():
                 file_path.unlink()
@@ -131,41 +136,63 @@ class FileService(BaseService):
         source_system: Optional[str] = None,
         status: Optional[str] = None,
         batch_id: Optional[str] = None
-    ) -> List[FileListResponse]:
+    ) -> FileListResponse:
         """Get list of files dengan filtering dan pagination."""
         try:
             self.log_operation("get_file_list", {
                 "skip": skip, "limit": limit, "file_type": file_type,
                 "source_system": source_system, "status": status, "batch_id": batch_id
             })
-            
-            stmt = select(FileRegistry)
-            
-            # Apply filters
+            conditions = []
             if file_type:
-                stmt = stmt.where(FileRegistry.file_type == file_type)
+                conditions.append(['file_type', file_type])
             if source_system:
-                stmt = stmt.where(FileRegistry.source_system == source_system)
+                conditions.append(['source_system', source_system])
             if status:
-                stmt = stmt.where(FileRegistry.processing_status == status)
+                conditions.append(['processing_status', status])   
             if batch_id:
-                stmt = stmt.where(FileRegistry.batch_id == batch_id)
+                conditions.append(['batch_id', batch_id])
+            sort_by = [{'field': 'upload_date', 'direction': 'desc'}]
+            criteria = {'and': conditions} if conditions else None
+            query = self.repo.build_query(
+                criteria=criteria,
+                sort_by=sort_by
+            )
+            page = skip // limit + 1
+            query = query.offset(skip).limit(limit)
             
-            stmt = stmt.order_by(FileRegistry.upload_date.desc()).offset(skip).limit(limit)
-            files = self.db_session.execute(stmt).scalars().all()
-            
-            return [
-                FileListResponse(
-                    file_id=file.file_id,
+            total_data = await self.repo.count_filtered(criteria=criteria)
+            files = self.db.execute(query).scalars().all()
+
+            file_metadata = [
+                FileMetadata(
+                    file_id=file.id,
                     file_name=file.file_name,
                     file_type=file.file_type,
                     file_size=file.file_size,
+                    file_path=file.file_path,
                     source_system=file.source_system,
                     processing_status=file.processing_status,
                     batch_id=file.batch_id,
-                    upload_date=file.upload_date
+                    upload_date=file.upload_date,
+                    created_by=file.created_by,
                 ) for file in files
             ]
+
+            metas = PaginatedMetaDataResponse(
+                total_pages=ceil(total_data / limit),
+                page=page,
+                per_page=limit,
+                total=total_data,
+                has_next=(skip + limit < len(file_metadata)),
+                has_prev=(skip > 0)
+            )
+
+            return FileListResponse(
+                data=file_metadata,
+                metas=metas
+            )
+            
             
         except Exception as e:
             self.handle_error(e, "get_file_list")
@@ -175,20 +202,20 @@ class FileService(BaseService):
         try:
             self.log_operation("get_file_detail", {"file_id": file_id})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 return None
             
             # Get raw records count
             raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)
-            raw_records = self.db_session.execute(raw_records_stmt).scalars().all()
+            raw_records = self.db.execute(raw_records_stmt).scalars().all()
             
             # Get column structure
             column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
-            columns = self.db_session.execute(column_structure_stmt).scalars().all()
+            columns = self.db.execute(column_structure_stmt).scalars().all()
             
             return FileDetailResponse(
-                file_id=file_registry.file_id,
+                file_id=file_registry.id,
                 file_name=file_registry.file_name,
                 file_path=file_registry.file_path,
                 file_type=file_registry.file_type,
@@ -222,7 +249,7 @@ class FileService(BaseService):
             
             self.log_operation("start_file_processing", {"file_id": file_id, "user_id": user_id})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
@@ -234,7 +261,7 @@ class FileService(BaseService):
             
             # Update status to processing
             file_registry.processing_status = ProcessingStatus.PROCESSING.value
-            self.db_session.commit()
+            self.db.commit()
             
             # Start background task
             task_result = process_file_task.delay(file_id, user_id)
@@ -242,7 +269,7 @@ class FileService(BaseService):
             return task_result.id
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "start_file_processing")
     
     async def delete_file(self, file_id: int, user_id: int) -> bool:
@@ -250,7 +277,7 @@ class FileService(BaseService):
         try:
             self.log_operation("delete_file", {"file_id": file_id, "user_id": user_id})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
@@ -267,13 +294,13 @@ class FileService(BaseService):
             await self._delete_related_data(file_id)
             
             # Delete file registry
-            self.db_session.delete(file_registry)
-            self.db_session.commit()
+            self.db.delete(file_registry)
+            self.db.commit()
             
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "delete_file")
     
     async def download_file(self, file_id: int) -> FileResponse:
@@ -281,7 +308,7 @@ class FileService(BaseService):
         try:
             self.log_operation("download_file", {"file_id": file_id})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
@@ -303,7 +330,7 @@ class FileService(BaseService):
         try:
             self.log_operation("preview_file_data", {"file_id": file_id, "rows": rows})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
@@ -356,7 +383,7 @@ class FileService(BaseService):
                     results.append({
                         "file_name": file.filename,
                         "status": "success",
-                        "file_id": result.file_id,
+                        "file_id": result.id,
                         "message": "Uploaded successfully"
                     })
                     success_count += 1
@@ -385,7 +412,7 @@ class FileService(BaseService):
         try:
             self.log_operation("process_file_content", {"file_id": file_id})
             
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
             
@@ -401,17 +428,17 @@ class FileService(BaseService):
             
             # Update processing status
             file_registry.processing_status = ProcessingStatus.COMPLETED.value
-            self.db_session.commit()
+            self.db.commit()
             
             return processing_result
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             # Update status to failed
-            file_registry = self.db_session.get(FileRegistry, file_id)
+            file_registry = self.db.get(FileRegistry, file_id)
             if file_registry:
                 file_registry.processing_status = ProcessingStatus.FAILED.value
-                self.db_session.commit()
+                self.db.commit()
             
             self.handle_error(e, "process_file_content")
     
@@ -440,18 +467,18 @@ class FileService(BaseService):
         if not processor_class:
             raise FileError(f"No processor available for file type: {file_type}")
         
-        return processor_class(self.db_session)
+        return processor_class(self.db)
     
     async def _delete_related_data(self, file_id: int):
         """Delete all related data for a file."""
         # Delete raw records
         raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)
-        raw_records = self.db_session.execute(raw_records_stmt).scalars().all()
+        raw_records = self.db.execute(raw_records_stmt).scalars().all()
         for record in raw_records:
-            self.db_session.delete(record)
+            self.db.delete(record)
         
         # Delete column structure
         column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
-        columns = self.db_session.execute(column_structure_stmt).scalars().all()
+        columns = self.db.execute(column_structure_stmt).scalars().all()
         for column in columns:
-            self.db_session.delete(column)
+            self.db.delete(column)

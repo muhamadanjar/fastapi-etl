@@ -1,8 +1,8 @@
-"""initial db
+"""initial
 
-Revision ID: dced541d5db7
+Revision ID: e7e5b2e30a6b
 Revises: 
-Create Date: 2025-07-26 11:11:23.178721
+Create Date: 2025-07-28 14:04:33.429058
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 import sqlmodel
 
+
 # revision identifiers, used by Alembic.
-revision: str = 'dced541d5db7'
+revision: str = 'e7e5b2e30a6b'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -137,21 +138,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_processed_entities_entity_key'), 'entities', ['entity_key'], unique=False, schema='processed')
     op.create_index(op.f('ix_processed_entities_entity_type'), 'entities', ['entity_type'], unique=False, schema='processed')
     op.create_index(op.f('ix_processed_entities_id'), 'entities', ['id'], unique=False, schema='processed')
-    op.create_table('file_registry',
-    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
-    sa.Column('file_name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
-    sa.Column('file_path', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
-    sa.Column('file_type', sa.Enum('CSV', 'EXCEL', 'JSON', 'XML', 'API', name='filetypeenum'), nullable=False),
-    sa.Column('file_size', sa.Integer(), nullable=True),
-    sa.Column('source_system', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-    sa.Column('upload_date', sa.DateTime(), nullable=False),
-    sa.Column('processing_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', name='processingstatus'), nullable=False),
-    sa.Column('batch_id', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
-    sa.Column('file_metadata', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id'),
-    schema='raw_data'
-    )
-    op.create_index(op.f('ix_raw_data_file_registry_id'), 'file_registry', ['id'], unique=False, schema='raw_data')
     op.create_table('lookup_tables',
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
@@ -206,7 +192,7 @@ def upgrade() -> None:
     sa.Column('full_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('is_superuser', sa.Boolean(), nullable=False),
-    sa.Column('id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('password', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
@@ -251,6 +237,54 @@ def upgrade() -> None:
     schema='processed'
     )
     op.create_index(op.f('ix_processed_entity_relationships_id'), 'entity_relationships', ['id'], unique=False, schema='processed')
+    op.create_table('file_registry',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('file_name', sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+    sa.Column('file_path', sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True),
+    sa.Column('file_type', sa.Enum('CSV', 'EXCEL', 'JSON', 'XML', 'API', name='filetypeenum'), nullable=False),
+    sa.Column('file_size', sa.Integer(), nullable=True),
+    sa.Column('source_system', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('upload_date', sa.DateTime(), nullable=False),
+    sa.Column('processing_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', name='processingstatus'), nullable=False),
+    sa.Column('batch_id', sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True),
+    sa.Column('created_by', sa.Uuid(), nullable=True),
+    sa.Column('file_metadata', sa.JSON(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    schema='raw_data'
+    )
+    op.create_index(op.f('ix_raw_data_file_registry_id'), 'file_registry', ['id'], unique=False, schema='raw_data')
+    op.create_table('data_lineage',
+    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
+    sa.Column('source_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('source_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('target_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('target_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
+    sa.Column('transformation_applied', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('execution_id', sa.Uuid(), nullable=True),
+    sa.ForeignKeyConstraint(['execution_id'], ['etl_control.job_executions.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    schema='audit'
+    )
+    op.create_index(op.f('ix_audit_data_lineage_id'), 'data_lineage', ['id'], unique=False, schema='audit')
+    op.create_table('quality_check_results',
+    sa.Column('check_result', sa.Enum('PASS', 'FAIL', 'WARNING', 'SKIP', 'ERROR', name='qualitycheckresult'), nullable=False),
+    sa.Column('records_checked', sa.Integer(), nullable=True),
+    sa.Column('records_passed', sa.Integer(), nullable=True),
+    sa.Column('records_failed', sa.Integer(), nullable=True),
+    sa.Column('failure_details', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('check_id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('rule_id', sa.Uuid(), nullable=False),
+    sa.Column('execution_id', sa.Uuid(), nullable=False),
+    sa.ForeignKeyConstraint(['execution_id'], ['etl_control.job_executions.id'], ),
+    sa.ForeignKeyConstraint(['rule_id'], ['etl_control.quality_rules.id'], ),
+    sa.PrimaryKeyConstraint('check_id'),
+    schema='etl_control'
+    )
+    op.create_index(op.f('ix_etl_control_quality_check_results_check_result'), 'quality_check_results', ['check_result'], unique=False, schema='etl_control')
+    op.create_index(op.f('ix_etl_control_quality_check_results_execution_id'), 'quality_check_results', ['execution_id'], unique=False, schema='etl_control')
+    op.create_index(op.f('ix_etl_control_quality_check_results_rule_id'), 'quality_check_results', ['rule_id'], unique=False, schema='etl_control')
     op.create_table('column_structure',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('file_id', sa.Uuid(), nullable=False),
@@ -289,37 +323,6 @@ def upgrade() -> None:
     schema='raw_data'
     )
     op.create_index(op.f('ix_raw_data_raw_records_id'), 'raw_records', ['id'], unique=False, schema='raw_data')
-    op.create_table('data_lineage',
-    sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
-    sa.Column('source_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-    sa.Column('source_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-    sa.Column('target_entity', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-    sa.Column('target_field', sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-    sa.Column('transformation_applied', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('execution_id', sa.Uuid(), nullable=True),
-    sa.ForeignKeyConstraint(['execution_id'], ['etl_control.job_executions.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    schema='audit'
-    )
-    op.create_index(op.f('ix_audit_data_lineage_id'), 'data_lineage', ['id'], unique=False, schema='audit')
-    op.create_table('quality_check_results',
-    sa.Column('check_result', sa.Enum('PASS', 'FAIL', 'WARNING', 'SKIP', 'ERROR', name='qualitycheckresult'), nullable=False),
-    sa.Column('records_checked', sa.Integer(), nullable=True),
-    sa.Column('records_passed', sa.Integer(), nullable=True),
-    sa.Column('records_failed', sa.Integer(), nullable=True),
-    sa.Column('failure_details', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-    sa.Column('check_id', sa.Integer(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.Column('rule_id', sa.Uuid(), nullable=False),
-    sa.Column('execution_id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['execution_id'], ['etl_control.job_executions.id'], ),
-    sa.ForeignKeyConstraint(['rule_id'], ['etl_control.quality_rules.id'], ),
-    sa.PrimaryKeyConstraint('check_id'),
-    schema='etl_control'
-    )
-    op.create_index(op.f('ix_etl_control_quality_check_results_check_result'), 'quality_check_results', ['check_result'], unique=False, schema='etl_control')
-    op.create_index(op.f('ix_etl_control_quality_check_results_execution_id'), 'quality_check_results', ['execution_id'], unique=False, schema='etl_control')
-    op.create_index(op.f('ix_etl_control_quality_check_results_rule_id'), 'quality_check_results', ['rule_id'], unique=False, schema='etl_control')
     op.create_table('standardized_data',
     sa.Column('id', sa.Uuid(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('source_file_id', sa.Uuid(), nullable=False),
@@ -352,16 +355,18 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_staging_standardized_data_entity_type'), table_name='standardized_data', schema='staging')
     op.drop_index(op.f('ix_staging_standardized_data_batch_id'), table_name='standardized_data', schema='staging')
     op.drop_table('standardized_data', schema='staging')
+    op.drop_index(op.f('ix_raw_data_raw_records_id'), table_name='raw_records', schema='raw_data')
+    op.drop_table('raw_records', schema='raw_data')
+    op.drop_index(op.f('ix_raw_data_column_structure_id'), table_name='column_structure', schema='raw_data')
+    op.drop_table('column_structure', schema='raw_data')
     op.drop_index(op.f('ix_etl_control_quality_check_results_rule_id'), table_name='quality_check_results', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_quality_check_results_execution_id'), table_name='quality_check_results', schema='etl_control')
     op.drop_index(op.f('ix_etl_control_quality_check_results_check_result'), table_name='quality_check_results', schema='etl_control')
     op.drop_table('quality_check_results', schema='etl_control')
     op.drop_index(op.f('ix_audit_data_lineage_id'), table_name='data_lineage', schema='audit')
     op.drop_table('data_lineage', schema='audit')
-    op.drop_index(op.f('ix_raw_data_raw_records_id'), table_name='raw_records', schema='raw_data')
-    op.drop_table('raw_records', schema='raw_data')
-    op.drop_index(op.f('ix_raw_data_column_structure_id'), table_name='column_structure', schema='raw_data')
-    op.drop_table('column_structure', schema='raw_data')
+    op.drop_index(op.f('ix_raw_data_file_registry_id'), table_name='file_registry', schema='raw_data')
+    op.drop_table('file_registry', schema='raw_data')
     op.drop_index(op.f('ix_processed_entity_relationships_id'), table_name='entity_relationships', schema='processed')
     op.drop_table('entity_relationships', schema='processed')
     op.drop_index(op.f('ix_etl_control_job_executions_status'), table_name='job_executions', schema='etl_control')
@@ -382,8 +387,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_staging_lookup_tables_is_active'), table_name='lookup_tables', schema='staging')
     op.drop_index(op.f('ix_staging_lookup_tables_id'), table_name='lookup_tables', schema='staging')
     op.drop_table('lookup_tables', schema='staging')
-    op.drop_index(op.f('ix_raw_data_file_registry_id'), table_name='file_registry', schema='raw_data')
-    op.drop_table('file_registry', schema='raw_data')
     op.drop_index(op.f('ix_processed_entities_id'), table_name='entities', schema='processed')
     op.drop_index(op.f('ix_processed_entities_entity_type'), table_name='entities', schema='processed')
     op.drop_index(op.f('ix_processed_entities_entity_key'), table_name='entities', schema='processed')

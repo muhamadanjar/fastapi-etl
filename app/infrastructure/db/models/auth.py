@@ -19,8 +19,8 @@ class User(UserBase, table=True):
     """User model"""
     __tablename__ = "users"
     
-    id: Optional[str] = Field(
-        default_factory=lambda: str(uuid.uuid4()),
+    id: Optional[uuid.UUID] = Field(
+        default_factory=lambda: uuid.uuid4(),
         primary_key=True
     )
     password: str
@@ -29,7 +29,7 @@ class User(UserBase, table=True):
     last_login: Optional[datetime] = Field(default=None)
     
     # Relationships
-    created_jobs: List["ETLJob"] = Relationship(back_populates="created_by_user")
+    # created_jobs: List["EtlJob"] = Relationship(back_populates="created_by_user")
     file_uploads: List["FileRegistry"] = Relationship(back_populates="uploaded_by_user")
 
 class UserCreate(UserBase):

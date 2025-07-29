@@ -19,3 +19,5 @@ __pycache__/
 *.hypothesis/
 *.coverage.*
 *.coverage.*       
+storage/
+logs/
