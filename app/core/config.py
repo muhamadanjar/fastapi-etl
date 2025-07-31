@@ -1,8 +1,10 @@
+import os
 from typing import List, Optional
 from pydantic import EmailStr, Field, field_validator
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -56,13 +58,19 @@ class RabbitMqSettings(BaseSettings):
 class CelerySettings(BaseSettings):
     """Celery configuration settings."""
     
-    broker_url: Optional[str] = Field(default=None, env="CELERY_BROKER_URL")
-    result_backend: Optional[str] = Field(default=None, env="CELERY_RESULT_BACKEND")
+    broker_url: Optional[str] = Field(default=os.environ.get("CELERY_BROKER_URL"), env="CELERY_BROKER_URL")
+    result_backend: Optional[str] = Field(default=os.environ.get("CELERY_RESULT_BACKEND"), env="CELERY_RESULT_BACKEND")
     task_serializer: str = Field(default="json", env="CELERY_TASK_SERIALIZER")
     accept_content: List[str] = Field(default=["json"], env="CELERY_ACCEPT_CONTENT")
     result_serializer: str = Field(default="json", env="CELERY_RESULT_SERIALIZER")
     timezone: str = Field(default="UTC", env="CELERY_TIMEZONE")
     enable_utc: bool = Field(default=True, env="CELERY_ENABLE_UTC")
+
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"), 
+        extra="allow", 
+        env_file_encoding="utf-8"
+    )
 
 
 class EmailSettings(BaseSettings):
@@ -169,10 +177,15 @@ class Settings(BaseSettings):
     default_page_size: int = Field(default=10, env="DEFAULT_PAGE_SIZE")
     max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
-    model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), extra="allow", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"), 
+        extra="allow", 
+        env_file_encoding="utf-8"
+    )
 
 
 settings = Settings()
+celery_settings = CelerySettings()
 
 @lru_cache
 def get_settings() -> Settings:

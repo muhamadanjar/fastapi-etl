@@ -251,3 +251,37 @@ python -m app.main
 ```bash
 python -m uvicorn app.main:app --reload
 ```
+
+### Command Excuted
+```bash
+chmod +x start_worker.sh
+```
+
+
+### Enable Service
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable celery-worker@priority
+sudo systemctl enable celery-worker@background
+sudo systemctl start celery-worker@priority
+sudo systemctl start celery-worker@background
+```
+
+
+### Basic Run Celery
+```bash
+# Worker dasar
+celery -A app.celery_app worker --loglevel=info
+# Worker dengan queue spesifik
+celery -A app.celery_app worker -Q etl,monitoring,cleanup --loglevel=info
+celery -A app.tasks.celery_app worker --queues=default,etl,monitoring,cleanup --loglevel=info
+# Worker dengan concurrency (jumlah proses)
+celery -A app.celery_app worker --concurrency=4 --loglevel=info
+# Worker dengan nama spesifik
+celery -A app.celery_app worker --hostname=worker1@%h --loglevel=info
+# Beat scheduler
+celery -A app.celery_app beat --loglevel=info
+# Beat dengan persistent scheduler
+celery -A app.celery_app beat --scheduler=celery.beat:PersistentScheduler --loglevel=info
+
+```

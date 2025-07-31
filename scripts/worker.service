@@ -1,0 +1,15 @@
+[Unit]
+Description=Celery Worker %i
+After=network.target
+
+[Service]
+Type=forking
+User=your-user
+Group=your-group
+WorkingDirectory=/path/to/your/project
+ExecStart=/path/to/your/project/start_worker.sh --type %i
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

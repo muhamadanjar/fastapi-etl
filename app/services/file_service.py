@@ -184,7 +184,7 @@ class FileService(BaseService):
                 page=page,
                 per_page=limit,
                 total=total_data,
-                has_next=(skip + limit < len(file_metadata)),
+                has_next=(skip + limit < total_data),
                 has_prev=(skip > 0)
             )
 
@@ -242,7 +242,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_detail")
     
-    async def start_file_processing(self, file_id: int, user_id: int) -> str:
+    async def start_file_processing(self, file_id: str, user_id: str) -> str:
         """Start processing file secara asynchronous."""
         try:
             from app.tasks.etl_tasks import process_file_task

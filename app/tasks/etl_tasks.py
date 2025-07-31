@@ -1,6 +1,7 @@
 # ==============================================
 # app/tasks/etl_tasks.py
 # ==============================================
+import asyncio
 import os
 import json
 import shutil
@@ -10,11 +11,13 @@ from pathlib import Path
 from sqlmodel import Session, select
 import pandas as pd
 
+from app.core.enums import ProcessingStatus
+
 from .celery_app import celery_app
 from app.interfaces.dependencies import get_db
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
-from app.infrastructure.db.models.etl_control.etl_jobs import ETLJobs
-from app.infrastructure.db.models.etl_control.job_executions import JobExecutions
+from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
+from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.infrastructure.db.models.audit.data_lineage import DataLineage
 from app.processors import get_processor
 from app.transformers import create_transformation_pipeline
@@ -28,13 +31,13 @@ logger = get_logger(__name__)
 
 @celery_app.task(
     bind=True,
-    name='etl.process_file',
+    name='app.tasks.etl_tasks.process_file_task',
     max_retries=3,
     default_retry_delay=300,  # 5 minutes
     time_limit=1800,  # 30 minutes
     soft_time_limit=1500  # 25 minutes
 )
-async def process_file_task(self, file_id: str, processing_config: Dict[str, Any] = None):
+def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[str, Any] = None):
     """
     Process a single file through the ETL pipeline
     
@@ -47,80 +50,88 @@ async def process_file_task(self, file_id: str, processing_config: Dict[str, Any
     """
     task_id = self.request.id
     logger.info(f"Starting file processing task {task_id} for file {file_id}")
+    print(f"Starting file processing task {task_id} for file {file_id}")
     
-    db = next(get_db())
     try:
-        # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
-        if not file_record:
-            raise FileProcessingException(f"File record not found: {file_id}")
-        
-        # Update file status
-        file_record.processing_status = 'PROCESSING'
-        db.add(file_record)
-        db.commit()
-        
-        # Determine processor type
-        file_type = file_record.file_type.lower()
-        processor = get_processor(file_type, db_session=db, batch_id=task_id)
-        
-        # Process the file
-        file_path = file_record.file_path
-        if not os.path.exists(file_path):
-            raise FileProcessingException(f"File not found: {file_path}")
-        
-        # Validate file format
-        is_valid, error_message = await processor.validate_file_format(file_path)
-        if not is_valid:
-            raise FileProcessingException(f"Invalid file format: {error_message}")
-        
-        # Process the file
-        processing_results = await processor.process_file(file_path, file_record)
-        
-        # Update file status based on results
-        if processing_results.get('successful_records', 0) > 0:
-            file_record.processing_status = 'COMPLETED'
-        else:
-            file_record.processing_status = 'FAILED'
-        
-        # Update metadata with processing results
-        metadata = file_record.metadata or {}
-        metadata.update({
-            'processing_results': processing_results,
-            'processed_at': datetime.utcnow().isoformat(),
-            'task_id': task_id
-        })
-        file_record.metadata = metadata
-        
-        db.add(file_record)
-        db.commit()
-        
-        logger.info(f"File processing completed for {file_id}: {processing_results}")
-        
-        return {
-            'status': 'success',
-            'file_id': file_id,
-            'task_id': task_id,
-            'processing_results': processing_results,
-            'completed_at': datetime.utcnow().isoformat()
-        }
+        with get_db() as db:
+            # Get file record
+            file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
+            if not file_record:
+                raise FileProcessingException(f"File record not found: {file_id}")
+            
+            # Update file status
+            file_record.processing_status = 'PROCESSING'
+            db.add(file_record)
+            db.commit()
+            
+            # Determine processor type
+            file_type = file_record.file_type.lower()
+            processor = get_processor(file_type, db_session=db, batch_id=task_id)
+            
+            # Process the file
+            file_path = file_record.file_path
+            if not os.path.exists(file_path):
+                raise FileProcessingException(f"File not found: {file_path}")
+            
+            # Validate file format
+            # is_valid, error_message = await processor.validate_file_format(file_path)
+            is_valid, error_message = asyncio.run(
+                processor.validate_file_format(file_path)
+            )
+            if not is_valid:
+                raise FileProcessingException(f"Invalid file format: {error_message}")
+            
+            # Process the file
+            # processing_results = await processor.process_file(file_path, file_record)
+            processing_results = asyncio.run(
+                processor.process_file(file_path, file_record)
+            )
+            
+            # Update file status based on results
+            if processing_results.get('successful_records', 0) > 0:
+                file_record.processing_status = ProcessingStatus.COMPLETED.value
+            else:
+                file_record.processing_status = ProcessingStatus.FAILED.value
+            
+            # Update metadata with processing results
+            metadata = file_record.file_metadata or {}
+            metadata.update({
+                'processing_results': processing_results,
+                'processed_at': datetime.utcnow().isoformat(),
+                'task_id': task_id
+            })
+            file_record.file_metadata = metadata
+            
+            db.add(file_record)
+            db.commit()
+            
+            logger.info(f"File processing completed for {file_id}: {processing_results}")
+            
+            return {
+                'status': 'success',
+                'file_id': file_id,
+                'task_id': task_id,
+                'processing_results': processing_results,
+                'completed_at': datetime.utcnow().isoformat()
+            }
         
     except Exception as e:
         logger.error(f"File processing failed for {file_id}: {str(e)}")
         
         # Update file status to failed
         try:
-            if 'file_record' in locals():
-                file_record.processing_status = 'FAILED'
-                metadata = file_record.metadata or {}
-                metadata.update({
-                    'error': str(e),
-                    'failed_at': datetime.utcnow().isoformat(),
-                    'task_id': task_id
-                })
-                file_record.metadata = metadata
-                db.add(file_record)
-                db.commit()
+            with get_db() as db:
+                if 'file_record' in locals():
+                    file_record.processing_status = 'FAILED'
+                    metadata = file_record.metadata or {}
+                    metadata.update({
+                        'error': str(e),
+                        'failed_at': datetime.utcnow().isoformat(),
+                        'task_id': task_id
+                    })
+                    file_record.metadata = metadata
+                    db.add(file_record)
+                    db.commit()
         except Exception as commit_error:
             logger.error(f"Failed to update file status: {commit_error}")
         
@@ -131,9 +142,7 @@ async def process_file_task(self, file_id: str, processing_config: Dict[str, Any
         
         raise ETLException(f"File processing failed after {self.max_retries} retries: {str(e)}")
     
-    finally:
-        db.close()
-
+    
 @celery_app.task(
     bind=True,
     name='etl.transformation_pipeline',
@@ -159,7 +168,7 @@ async def run_transformation_pipeline(self, job_execution_id: str, transformatio
     db = next(get_db())
     try:
         # Get job execution record
-        execution = db.exec(select(JobExecutions).where(JobExecutions.execution_id == job_execution_id)).first()
+        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == job_execution_id)).first()
         if not execution:
             raise ETLException(f"Job execution not found: {job_execution_id}")
         
@@ -295,7 +304,7 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
     db = next(get_db())
     try:
         # Get ETL job
-        job = db.exec(select(ETLJobs).where(ETLJobs.job_id == job_id)).first()
+        job = db.exec(select(EtlJob).where(EtlJob.job_id == job_id)).first()
         if not job:
             raise ETLException(f"ETL job not found: {job_id}")
         
@@ -303,7 +312,7 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
             raise ETLException(f"ETL job is not active: {job_id}")
         
         # Create job execution record
-        execution = JobExecutions(
+        execution = JobExecution(
             job_id=job_id,
             status='RUNNING',
             start_time=datetime.utcnow(),
@@ -1207,3 +1216,8 @@ def chain_job_execution_task(self, job_ids: List[str], execution_config: Dict[st
     except Exception as e:
         logger.error(f"Job chain execution failed: {str(e)}")
         raise ETLException(f"Job chain execution failed: {str(e)}")
+    
+@celery_app.task(bind=True, name='simple_test')
+def simple_test(self, message="hello"):
+    print(f"Simple test executed: {message}")
+    return f"Success: {message}"

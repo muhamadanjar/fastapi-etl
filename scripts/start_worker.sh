@@ -74,7 +74,7 @@ echo "Concurrency: $CONCURRENCY"
 echo "Log level: $LOG_LEVEL"
 
 # Build celery command
-CELERY_CMD="celery -A app.infrastructure.tasks.celery_app worker"
+CELERY_CMD="celery -A app.tasks.celery_app worker"
 
 # Add worker-specific options based on type
 case $WORKER_TYPE in

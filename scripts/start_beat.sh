@@ -61,7 +61,7 @@ echo "Log level: $LOG_LEVEL"
 echo "Schedule file: $SCHEDULE_FILE"
 
 # Build celery beat command
-CELERY_CMD="celery -A app.infrastructure.tasks.celery_app beat"
+CELERY_CMD="celery -A app.tasks.celery_app beat"
 CELERY_CMD="$CELERY_CMD --loglevel=$LOG_LEVEL"
 CELERY_CMD="$CELERY_CMD --schedule=$SCHEDULE_FILE"
 CELERY_CMD="$CELERY_CMD --pidfile=celerybeat.pid"

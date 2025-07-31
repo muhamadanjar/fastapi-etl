@@ -14,7 +14,7 @@ from app.infrastructure.db.models.auth import User
 # Security
 security = HTTPBearer()
 
-async def get_db() -> Session:
+async def get_db():
     """Database dependency"""
     with get_session() as session:
         yield session

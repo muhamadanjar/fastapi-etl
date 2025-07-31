@@ -7,7 +7,23 @@ from celery.schedules import crontab
 from kombu import Queue
 from datetime import datetime, timedelta
 
-from app.core.config import settings
+from app.core.config import get_settings, celery_settings
+from dotenv import load_dotenv
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Naik 3 tingkat dari tasks/
+
+print("BASE_DIR:", BASE_DIR)
+load_dotenv(dotenv_path=str(BASE_DIR / ".env"))
+
+settings = get_settings()
+
+import os
+print("ENV: CELERY_BROKER_URL", os.environ.get("CELERY_BROKER_URL"))
+print("ENV:CELERY_RESULT_BACKEND =", os.getenv("CELERY_RESULT_BACKEND"))
+print("Settings: CELERY_BROKER_URL", celery_settings.broker_url)
+print("Settings: CELERY_RESULT_BACKEND", celery_settings.result_backend)
 
 # Create Celery instance
 celery_app = Celery(

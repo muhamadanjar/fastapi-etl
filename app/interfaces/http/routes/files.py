@@ -1,3 +1,4 @@
+from uuid import UUID
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
@@ -70,7 +71,7 @@ async def list_files(
 
 @router.get("/{file_id}", response_model=FileDetailResponse)
 async def get_file_detail(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> FileDetailResponse:
@@ -88,7 +89,7 @@ async def get_file_detail(
 
 @router.post("/{file_id}/process")
 async def process_file(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
