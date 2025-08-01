@@ -246,14 +246,14 @@ class CSVProcessor(BaseProcessor):
             delimiter = await self._detect_delimiter(file_path, encoding)
             
             # Update file metadata
-            metadata = file_registry.metadata or {}
+            metadata = file_registry.file_metadata or {}
             metadata.update({
                 "encoding": encoding,
                 "delimiter": delimiter,
                 "delimiter_name": self._get_delimiter_name(delimiter),
                 "processor": "CSVProcessor"
             })
-            file_registry.metadata = metadata
+            file_registry.file_metadata = metadata
             self.db_session.add(file_registry)
             
             # Detect and save column structure

@@ -271,17 +271,20 @@ sudo systemctl start celery-worker@background
 ### Basic Run Celery
 ```bash
 # Worker dasar
-celery -A app.celery_app worker --loglevel=info
+celery -A app.tasks.celery_app worker --loglevel=info
 # Worker dengan queue spesifik
-celery -A app.celery_app worker -Q etl,monitoring,cleanup --loglevel=info
+celery -A app.tasks.celery_app worker -Q etl,monitoring,cleanup --loglevel=info
 celery -A app.tasks.celery_app worker --queues=default,etl,monitoring,cleanup --loglevel=info
+# Run worker dengan eventlet
+celery -A app.tasks.celery_app worker --pool=eventlet --queues=default,etl,monitoring,cleanup --concurrency=10 --loglevel=info
 # Worker dengan concurrency (jumlah proses)
-celery -A app.celery_app worker --concurrency=4 --loglevel=info
+celery -A app.tasks.celery_app worker --concurrency=4 --loglevel=info
 # Worker dengan nama spesifik
-celery -A app.celery_app worker --hostname=worker1@%h --loglevel=info
+celery -A app.tasks.celery_app worker --hostname=worker1@%h --loglevel=info
+
 # Beat scheduler
-celery -A app.celery_app beat --loglevel=info
+celery -A app.tasks.celery_app beat --loglevel=info
 # Beat dengan persistent scheduler
-celery -A app.celery_app beat --scheduler=celery.beat:PersistentScheduler --loglevel=info
+celery -A app.tasks.celery_app beat --scheduler=celery.beat:PersistentScheduler --loglevel=info
 
 ```

@@ -253,7 +253,7 @@ class XMLProcessor(BaseProcessor):
             structure_info = await self._analyze_xml_structure(file_path)
             
             # Update file metadata
-            metadata = file_registry.metadata or {}
+            metadata = file_registry.file_metadata or {}
             metadata.update({
                 "xml_structure_type": structure_info['structure_type'],
                 "root_element": structure_info['root_element'],
@@ -264,7 +264,7 @@ class XMLProcessor(BaseProcessor):
                 "estimated_records": structure_info['record_count'],
                 "processor": "XMLProcessor"
             })
-            file_registry.metadata = metadata
+            file_registry.file_metadata = metadata
             self.db_session.add(file_registry)
             
             # Detect and save structure

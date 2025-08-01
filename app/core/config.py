@@ -65,6 +65,7 @@ class CelerySettings(BaseSettings):
     result_serializer: str = Field(default="json", env="CELERY_RESULT_SERIALIZER")
     timezone: str = Field(default="UTC", env="CELERY_TIMEZONE")
     enable_utc: bool = Field(default=True, env="CELERY_ENABLE_UTC")
+    SEND_TASK_FAILURE_NOTIFICATIONS: bool = Field(default=True, env="SEND_TASK_FAILURE_NOTIFICATIONS")
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"), 

@@ -244,7 +244,7 @@ class JSONProcessor(BaseProcessor):
             json_structure = await self._detect_json_structure(file_path)
             
             # Update file metadata
-            metadata = file_registry.metadata or {}
+            metadata = file_registry.file_metadata or {}
             metadata.update({
                 "json_structure_type": json_structure['type'],
                 "encoding": self.encoding,
@@ -253,7 +253,7 @@ class JSONProcessor(BaseProcessor):
                 "estimated_records": json_structure.get('estimated_records', 0),
                 "processor": "JSONProcessor"
             })
-            file_registry.metadata = metadata
+            file_registry.file_metadata = metadata
             self.db_session.add(file_registry)
             
             # Detect and save structure

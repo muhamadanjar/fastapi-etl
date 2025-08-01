@@ -19,6 +19,7 @@ from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.infrastructure.db.models.audit.data_lineage import DataLineage
+from app.infrastructure.db.connection import get_session
 from app.processors import get_processor
 from app.transformers import create_transformation_pipeline
 from app.services.etl_service import ETLService
@@ -53,14 +54,14 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
     print(f"Starting file processing task {task_id} for file {file_id}")
     
     try:
-        with get_db() as db:
+        with get_session() as db:
             # Get file record
             file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
             if not file_record:
                 raise FileProcessingException(f"File record not found: {file_id}")
             
             # Update file status
-            file_record.processing_status = 'PROCESSING'
+            file_record.processing_status = ProcessingStatus.PROCESSING.value
             db.add(file_record)
             db.commit()
             
@@ -120,16 +121,16 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
         
         # Update file status to failed
         try:
-            with get_db() as db:
+            with get_session() as db:
                 if 'file_record' in locals():
                     file_record.processing_status = 'FAILED'
-                    metadata = file_record.metadata or {}
+                    metadata = file_record.file_metadata or {}
                     metadata.update({
                         'error': str(e),
                         'failed_at': datetime.utcnow().isoformat(),
                         'task_id': task_id
                     })
-                    file_record.metadata = metadata
+                    file_record.file_metadata = metadata
                     db.add(file_record)
                     db.commit()
         except Exception as commit_error:
@@ -951,7 +952,7 @@ async def validate_file_format_task(self, file_id: str):
         is_valid, error_message = await processor.validate_file_format(file_record.file_path)
         
         # Update file metadata
-        metadata = file_record.metadata or {}
+        metadata = file_record.file_metadata or {}
         metadata.update({
             'format_validated': True,
             'format_valid': is_valid,
@@ -959,7 +960,7 @@ async def validate_file_format_task(self, file_id: str):
             'validated_at': datetime.utcnow().isoformat(),
             'validation_task_id': task_id
         })
-        file_record.metadata = metadata
+        file_record.file_metadata = metadata
         db.add(file_record)
         db.commit()
         

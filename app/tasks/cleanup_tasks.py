@@ -157,9 +157,9 @@ def archive_old_data(self, archive_after_days: int = 90) -> Dict[str, Any]:
                         
                         # Update file registry with new path
                         file_record.file_path = str(archive_path)
-                        file_record.metadata = file_record.metadata or {}
-                        file_record.metadata['archived_at'] = get_current_timestamp().isoformat()
-                        file_record.metadata['archived_from'] = str(original_path)
+                        file_record.file_metadata = file_record.file_metadata or {}
+                        file_record.file_metadata['archived_at'] = get_current_timestamp().isoformat()
+                        file_record.file_metadata['archived_from'] = str(original_path)
                         
                         archived_count += 1
                         archived_size += original_path.stat().st_size if original_path.exists() else 0
@@ -716,9 +716,9 @@ def reset_stuck_jobs(self, stuck_hours: int = 24) -> Dict[str, Any]:
             for file_record in stuck_files:
                 try:
                     file_record.processing_status = ProcessingStatus.FAILED.value
-                    file_record.metadata = file_record.metadata or {}
-                    file_record.metadata['reset_reason'] = f"Stuck in processing for more than {stuck_hours} hours"
-                    file_record.metadata['reset_at'] = get_current_timestamp().isoformat()
+                    file_record.file_metadata = file_record.file_metadata or {}
+                    file_record.file_metadata['reset_reason'] = f"Stuck in processing for more than {stuck_hours} hours"
+                    file_record.file_metadata['reset_at'] = get_current_timestamp().isoformat()
                     
                     file_reset_count += 1
                     

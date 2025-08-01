@@ -283,14 +283,14 @@ class ExcelProcessor(BaseProcessor):
             sheets_info = await self._get_sheets_info(file_path)
             
             # Update file metadata
-            metadata = file_registry.metadata or {}
+            metadata = file_registry.file_metadata or {}
             metadata.update({
                 "total_sheets": len(sheets_info),
                 "sheets": [s['name'] for s in sheets_info],
                 "file_type": Path(file_path).suffix.upper(),
                 "processor": "ExcelProcessor"
             })
-            file_registry.metadata = metadata
+            file_registry.file_metadata = metadata
             self.db_session.add(file_registry)
             
             # Detect and save structure for all sheets

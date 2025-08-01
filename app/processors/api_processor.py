@@ -214,7 +214,7 @@ class APIProcessor(BaseProcessor):
             self.logger.info(f"Starting API data processing from: {self.api_config.base_url}/{self.api_config.endpoint}")
             
             # Update file metadata
-            metadata = file_registry.metadata or {}
+            metadata = file_registry.file_metadata or {}
             metadata.update({
                 "api_endpoint": urljoin(self.api_config.base_url, self.api_config.endpoint),
                 "response_format": self.response_format,
@@ -223,7 +223,7 @@ class APIProcessor(BaseProcessor):
                 "rate_limit": self.api_config.rate_limit,
                 "processor": "APIProcessor"
             })
-            file_registry.metadata = metadata
+            file_registry.file_metadata = metadata
             self.db_session.add(file_registry)
             
             # Detect and save structure

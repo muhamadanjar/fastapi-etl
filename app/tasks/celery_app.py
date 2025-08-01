@@ -281,7 +281,7 @@ class BaseTask(celery_app.Task):
         logger.error(f"Task {self.name}[{task_id}] failed: {exc}")
         
         # Send failure notification if configured
-        if settings.SEND_TASK_FAILURE_NOTIFICATIONS:
+        if settings.celery_settings.SEND_TASK_FAILURE_NOTIFICATIONS:
             self.send_failure_notification(exc, task_id, args, kwargs)
     
     def on_retry(self, exc, task_id, args, kwargs, einfo):
