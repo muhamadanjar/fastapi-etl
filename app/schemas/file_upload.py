@@ -81,7 +81,7 @@ class ColumnStructure(BaseModel):
 
 class FileStructureAnalysis(BaseModel):
     """Schema for file structure analysis."""
-    file_id: int
+    file_id: UUID
     total_rows: int
     total_columns: int
     columns: List[ColumnStructure]
@@ -92,7 +92,7 @@ class FileStructureAnalysis(BaseModel):
 
 class FilePreview(BaseModel):
     """Schema for file preview."""
-    file_id: int
+    file_id: UUID
     headers: List[str]
     sample_data: List[Dict[str, Any]]
     total_rows: int

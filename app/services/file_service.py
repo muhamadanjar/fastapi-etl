@@ -22,7 +22,7 @@ from app.services.base import BaseService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
-from app.schemas.file_upload import FileMetadata, FileUploadResponse, FileListResponse, FileDetailResponse
+from app.schemas.file_upload import FileMetadata, FileStructureAnalysis, FileUploadResponse, FileListResponse, FileDetailResponse
 from app.core.exceptions import FileError, ServiceError
 from app.core.enums import ProcessingStatus, FileTypeEnum
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
@@ -197,7 +197,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_list")
     
-    async def get_file_detail(self, file_id: int) -> Optional[FileDetailResponse]:
+    async def get_file_detail(self, file_id: UUID) -> Optional[FileDetailResponse]:
         """Get detailed information tentang file."""
         try:
             self.log_operation("get_file_detail", {"file_id": file_id})
@@ -213,8 +213,8 @@ class FileService(BaseService):
             # Get column structure
             column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
             columns = self.db.execute(column_structure_stmt).scalars().all()
-            
-            return FileDetailResponse(
+
+            file_metadata = FileMetadata(
                 file_id=file_registry.id,
                 file_name=file_registry.file_name,
                 file_path=file_registry.file_path,
@@ -225,18 +225,39 @@ class FileService(BaseService):
                 batch_id=file_registry.batch_id,
                 upload_date=file_registry.upload_date,
                 created_by=file_registry.created_by,
-                metadata=file_registry.metadata,
-                records_count=len(raw_records),
-                valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
-                invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
-                columns=[{
-                    "name": col.column_name,
-                    "position": col.column_position,
-                    "data_type": col.data_type,
-                    "sample_values": col.sample_values,
-                    "null_count": col.null_count,
-                    "unique_count": col.unique_count
-                } for col in columns]
+                metadata=file_registry.file_metadata if file_registry.file_metadata else {}
+            )
+            return FileDetailResponse(
+                file=file_metadata,
+                structure_analysis=FileStructureAnalysis(
+                    file_id=file_registry.id,
+                    total_rows=len(raw_records),
+                    total_columns=len(columns),
+                    columns=[{
+                        "column_name": col.column_name,
+                        "column_position": col.column_position,
+                        "data_type": col.data_type,
+                        "sample_values": col.sample_values,
+                        "null_count": col.null_count,
+                        "unique_count": col.unique_count
+                    } for col in columns],
+                    data_quality_score=1.0,
+                    issues_found=[],
+                    recommendations=[]
+                ),
+                
+                
+                # records_count=len(raw_records),
+                # valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
+                # invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                # columns=[{
+                #     "name": col.column_name,
+                #     "position": col.column_position,
+                #     "data_type": col.data_type,
+                #     "sample_values": col.sample_values,
+                #     "null_count": col.null_count,
+                #     "unique_count": col.unique_count
+                # } for col in columns]
             )
             
         except Exception as e:
