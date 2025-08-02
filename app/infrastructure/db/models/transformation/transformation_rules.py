@@ -54,3 +54,4 @@ class TransformationRuleUpdate(SQLModel):
     rule_parameters: Optional[Dict[str, Any]] = Field(default=None)
     priority: Optional[int] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
+    

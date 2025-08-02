@@ -152,7 +152,7 @@ async def download_file(
 
 @router.get("/{file_id}/preview")
 async def preview_file_data(
-    file_id: int,
+    file_id: UUID,
     rows: int = Query(10, ge=1, le=100, description="Number of rows to preview"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -204,7 +204,7 @@ async def batch_upload(
 
 @router.get("/{file_id}/processing-status")
 async def get_processing_status(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
@@ -221,12 +221,12 @@ async def get_processing_status(
         
         return {
             "file_id": file_id,
-            "file_name": file_detail.file_name,
-            "processing_status": file_detail.processing_status,
-            "records_count": file_detail.records_count,
-            "valid_records": file_detail.valid_records,
-            "invalid_records": file_detail.invalid_records,
-            "upload_date": file_detail.upload_date
+            "file_name": file_detail.file.file_name,
+            "processing_status": file_detail.file.processing_status,
+            "records_count": file_detail.validation_result.total_records,
+            "valid_records": file_detail.validation_result.valid_records,
+            "invalid_records": file_detail.validation_result.invalid_records,
+            "upload_date": file_detail.file.upload_date
         }
     except HTTPException:
         raise
@@ -238,7 +238,7 @@ async def get_processing_status(
 
 @router.post("/{file_id}/reprocess")
 async def reprocess_file(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:

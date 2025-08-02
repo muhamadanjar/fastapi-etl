@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-
+from uuid import UUID
 from app.services.base import BaseService
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
@@ -59,7 +59,7 @@ class ETLService(BaseService):
             self.db_session.rollback()
             self.handle_error(e, "create_etl_job")
     
-    async def execute_job(self, job_id: int, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute_job(self, job_id: UUID, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute an ETL job."""
         try:
             from app.tasks.etl_tasks import execute_etl_job

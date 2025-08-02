@@ -288,3 +288,41 @@ celery -A app.tasks.celery_app beat --loglevel=info
 celery -A app.tasks.celery_app beat --scheduler=celery.beat:PersistentScheduler --loglevel=info
 
 ```
+
+
+Komponen Utama:
+1. Metadata Management
+
+data_sources: Konfigurasi sumber data (database, file, API)
+etl_jobs: Definisi job ETL dan penjadwalannya
+transformation_mappings: Pemetaan kolom dan aturan transformasi
+configuration_parameters: Parameter konfigurasi yang fleksibel
+
+2. Orchestration & Dependencies
+
+job_dependencies: Mengatur urutan dan dependensi antar job
+job_executions: Log eksekusi setiap job dengan status dan metrik
+
+3. Quality & Monitoring
+
+data_quality_rules: Definisi aturan validasi data
+data_quality_results: Hasil pengecekan kualitas data
+performance_metrics: Metrik performa untuk monitoring
+
+4. Error Handling
+
+error_logs: Log error detail dengan stack trace
+rejected_records: Data yang ditolak beserta alasannya
+
+5. Audit & Compliance
+
+audit_trail: Jejak perubahan data untuk compliance
+Views: Summary untuk monitoring dan reporting
+
+Fitur Utama:
+✅ Scalable: Mendukung multiple data sources dan job types
+✅ Monitoring: Views dan metrik untuk monitoring real-time
+✅ Error Handling: Comprehensive error logging dan retry mechanism
+✅ Data Quality: Built-in data quality validation
+✅ Security: Password encryption dan audit trail
+✅ Performance: Indexes yang optimal untuk query cepat

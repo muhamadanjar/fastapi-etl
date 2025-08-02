@@ -22,7 +22,7 @@ from app.services.base import BaseService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
-from app.schemas.file_upload import FileMetadata, FileStructureAnalysis, FileUploadResponse, FileListResponse, FileDetailResponse
+from app.schemas.file_upload import FileMetadata, FilePreview, FileStructureAnalysis, FileUploadResponse, FileListResponse, FileDetailResponse, FileValidationResult
 from app.core.exceptions import FileError, ServiceError
 from app.core.enums import ProcessingStatus, FileTypeEnum
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
@@ -176,6 +176,7 @@ class FileService(BaseService):
                     batch_id=file.batch_id,
                     upload_date=file.upload_date,
                     created_by=file.created_by,
+                    metadata=file.file_metadata if file.file_metadata else {}
                 ) for file in files
             ]
 
@@ -245,6 +246,25 @@ class FileService(BaseService):
                     issues_found=[],
                     recommendations=[]
                 ),
+                preview=FilePreview(
+                    file_id=file_registry.id,
+                    headers=[col.column_name for col in columns],
+                    sample_data=[{
+                        col.column_name: getattr(record, col.column_name, None)
+                        for col in columns
+                    } for record in raw_records[:10]],  # Preview first 10 records  
+                    total_rows=len(raw_records),
+                    preview_rows=min(10, len(raw_records))  # Limit preview to 10 rows
+                ),
+                validation_result=FileValidationResult(
+                    file_id=file_registry.id,
+                    validation_status='VALID',  # Assuming validation is done
+                    valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
+                    invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                    quality_score=1.0,  # Placeholder for quality score
+                    warnings=0,
+                    total_records=len(raw_records),
+                )
                 
                 
                 # records_count=len(raw_records),
@@ -293,7 +313,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "start_file_processing")
     
-    async def delete_file(self, file_id: int, user_id: int) -> bool:
+    async def delete_file(self, file_id: UUID, user_id: int) -> bool:
         """Delete file dan semua data yang terkait."""
         try:
             self.log_operation("delete_file", {"file_id": file_id, "user_id": user_id})
@@ -324,7 +344,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "delete_file")
     
-    async def download_file(self, file_id: int) -> FileResponse:
+    async def download_file(self, file_id: UUID) -> FileResponse:
         """Download original file."""
         try:
             self.log_operation("download_file", {"file_id": file_id})
@@ -346,7 +366,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "download_file")
     
-    async def preview_file_data(self, file_id: int, rows: int = 10) -> Dict[str, Any]:
+    async def preview_file_data(self, file_id: UUID, rows: int = 10) -> Dict[str, Any]:
         """Preview file data (first N rows)."""
         try:
             self.log_operation("preview_file_data", {"file_id": file_id, "rows": rows})
@@ -381,7 +401,7 @@ class FileService(BaseService):
         files: List[UploadFile],
         source_system: str,
         batch_id: Optional[str] = None,
-        user_id: int = None
+        user_id: UUID = None
     ) -> Dict[str, Any]:
         """Upload multiple files dalam satu batch."""
         try:

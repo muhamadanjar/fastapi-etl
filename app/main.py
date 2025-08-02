@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await database_manager.connect()
             print("✅ Database connection established")
 
-            # setup_logging()
+            setup_logging()
             
         except Exception as e:
             print(f"⚠️  Redis unavailable: {e}")

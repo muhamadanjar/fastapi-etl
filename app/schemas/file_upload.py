@@ -125,7 +125,7 @@ class FileDownloadRequest(BaseModel):
 
 class FileValidationResult(BaseModel):
     """Schema for file validation result."""
-    file_id: int
+    file_id: UUID
     validation_status: ValidationStatus
     total_records: int
     valid_records: int
@@ -165,4 +165,5 @@ class FileDetailResponse(BaseResponse):
     preview: Optional[FilePreview] = None
     processing_status: Optional[FileProcessingStatus] = None
     validation_result: Optional[FileValidationResult] = None
+
     
