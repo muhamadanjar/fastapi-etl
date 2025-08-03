@@ -95,6 +95,36 @@ class UnauthorizedError(AppException):
             status_code=401,
         )
 
+class AuthenticationException(AppException):
+    """Exception raised when authentication fails."""
+    
+    def __init__(
+        self,
+        message: str = "Authentication failed",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="AUTHENTICATION_ERROR",
+            details=details,
+            status_code=401,
+        )
+
+class AuthorizationException(AppException):
+    """Exception raised when authorization fails."""
+    
+    def __init__(
+        self,
+        message: str = "Authorization failed",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="AUTHORIZATION_ERROR",
+            details=details,
+            status_code=403,
+        )
+
 
 class ForbiddenError(AppException):
     """Exception raised when access is forbidden."""
@@ -625,6 +655,28 @@ class ETLException(AppException):
         super().__init__(
             message=message,
             error_code="ETL_ERROR",
+            details=exception_details, 
+            status_code=500,
+        )
+
+class DataQualityException(AppException):
+    """Exception raised for data quality-related errors."""
+    
+    def __init__(
+        self,
+        message: str = "Data quality error occurred",
+        check: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.check = check
+        
+        exception_details = details or {}
+        if check:
+            exception_details["check"] = check
+        
+        super().__init__(
+            message=message,
+            error_code="DATA_QUALITY_ERROR",
             details=exception_details, 
             status_code=500,
         )

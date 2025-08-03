@@ -25,3 +25,9 @@ ALLOWED_FILE_TYPES = [
     "application/json"
 ]
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+LOG_EXCLUDE_PATHS = [
+    "/health",
+    "/metrics",
+    "/static",
+]
+

@@ -17,6 +17,7 @@ from app.infrastructure.db.service import user_service
 from app.infrastructure.messaging import messaging_manager, Message
 from app.infrastructure.messaging.decorators import message_handler, publish_event
 from app.infrastructure.messaging.manager import MessagingType
+from app.interfaces.http.middleware.logging import LoggingMiddleware
 from app.interfaces.http.routes import api_router as app_routes
 import uvicorn
 
@@ -133,6 +134,8 @@ def create_application() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    app.add_middleware(LoggingMiddleware)
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:

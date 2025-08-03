@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 
 from app.core.exceptions import AuthenticationException, AuthorizationException
-from app.infrastructure.db.models.base import User
+from app.infrastructure.db.models import User
 from app.interfaces.dependencies import get_db
 from app.core.config import settings
 from app.utils.logger import get_logger

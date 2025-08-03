@@ -142,3 +142,59 @@ class NotificationStatus(str, Enum):
     FAILED = "FAILED"
     DELIVERED = "DELIVERED"
     READ = "READ"
+
+
+class QualityRuleType(Enum):
+    """Data quality rule types"""
+    COMPLETENESS = "COMPLETENESS"    # Check for null/empty values
+    UNIQUENESS = "UNIQUENESS"        # Check for duplicates
+    VALIDITY = "VALIDITY"            # Check data format/pattern
+    CONSISTENCY = "CONSISTENCY"      # Check data consistency
+    ACCURACY = "ACCURACY"            # Check data accuracy
+    INTEGRITY = "INTEGRITY"          # Check referential integrity
+    TIMELINESS = "TIMELINESS"        # Check data freshness
+    CUSTOM = "CUSTOM"                # Custom validation logic
+
+
+class QualitySeverity(Enum):
+    """Quality rule severity levels"""
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class QualityCheckStatus(Enum):
+    """Quality check status"""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class QualityCheckResult(Enum):
+    """Quality check result"""
+    PASS = "PASS"
+    FAIL = "FAIL"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
+class ValidationAction(Enum):
+    """Actions to take when validation fails"""
+    WARN = "WARN"        # Log warning and continue
+    FAIL = "FAIL"        # Fail the entire process
+    SKIP = "SKIP"        # Skip the invalid record
+    CORRECT = "CORRECT"  # Attempt to correct the data
+
+
+class QualityDimension(Enum):
+    """Data quality dimensions"""
+    COMPLETENESS = "COMPLETENESS"
+    ACCURACY = "ACCURACY"
+    CONSISTENCY = "CONSISTENCY"
+    VALIDITY = "VALIDITY"
+    UNIQUENESS = "UNIQUENESS"
+    TIMELINESS = "TIMELINESS"
+    INTEGRITY = "INTEGRITY"

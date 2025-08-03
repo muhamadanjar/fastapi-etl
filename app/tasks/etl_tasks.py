@@ -429,7 +429,7 @@ async def validate_data_quality(self, entity_type: str = None, validation_config
         
         # Run quality checks
         if entity_type:
-            results = await quality_service.run_quality_check(entity_type, validation_config)
+            results = await quality_service.run_quality_check(entity_type=entity_type, check_config=validation_config)
         else:
             # Run all active quality rules
             results = await quality_service.run_all_quality_checks()

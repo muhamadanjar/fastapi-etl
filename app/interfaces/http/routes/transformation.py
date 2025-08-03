@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
-
+from uuid import UUID
 from app.infrastructure.db.connection import get_session_dependency
-from app.interfaces.dependencies import get_current_user, get_db
+from app.interfaces.dependencies import get_current_user
 from app.schemas.transformation import (
     TransformationRuleCreate, TransformationRuleRead, TransformationRuleUpdate,
     FieldMappingCreate, FieldMappingRead, FieldMappingUpdate,
@@ -44,7 +44,7 @@ async def list_transformation_rules(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[TransformationRuleRead]:
     """List transformation rules with optional filtering"""
     try:
@@ -73,7 +73,7 @@ async def list_transformation_rules(
 async def get_transformation_rule(
     rule_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> TransformationRuleRead:
     """Get transformation rule by ID"""
     try:
@@ -102,7 +102,7 @@ async def update_transformation_rule(
     rule_id: int,
     rule_data: TransformationRuleUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Update transformation rule"""
     try:
@@ -121,7 +121,7 @@ async def update_transformation_rule(
 async def delete_transformation_rule(
     rule_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Delete transformation rule"""
     try:
@@ -151,7 +151,7 @@ async def delete_transformation_rule(
 async def create_field_mapping(
     mapping_data: FieldMappingCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Create a new field mapping"""
     try:
@@ -171,7 +171,7 @@ async def list_field_mappings(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[FieldMappingRead]:
     """List field mappings with optional filtering"""
     try:
@@ -196,9 +196,9 @@ async def list_field_mappings(
 
 @router.get("/mappings/{mapping_id}", response_model=FieldMappingRead)
 async def get_field_mapping(
-    mapping_id: int,
+    mapping_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> FieldMappingRead:
     """Get field mapping by ID"""
     try:
@@ -224,10 +224,10 @@ async def get_field_mapping(
 
 @router.put("/mappings/{mapping_id}", response_model=Dict[str, Any])
 async def update_field_mapping(
-    mapping_id: int,
+    mapping_id: UUID,
     mapping_data: FieldMappingUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Update field mapping"""
     # Note: You'll need to implement update_field_mapping in TransformationService
@@ -243,9 +243,9 @@ async def update_field_mapping(
 
 @router.delete("/mappings/{mapping_id}")
 async def delete_field_mapping(
-    mapping_id: int,
+    mapping_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Delete field mapping"""
     # Note: You'll need to implement delete_field_mapping in TransformationService
@@ -267,7 +267,7 @@ async def delete_field_mapping(
 async def transform_data_batch(
     transform_request: DataTransformRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> DataTransformResponse:
     """Transform a batch of data using configured rules and mappings"""
     try:
@@ -290,7 +290,7 @@ async def transform_data_batch(
 async def apply_custom_transformation(
     transform_request: CustomTransformRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Apply custom transformation logic to data batch"""
     try:
@@ -311,7 +311,7 @@ async def apply_custom_transformation(
 async def test_transformation(
     test_request: TestTransformRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> TestTransformResponse:
     """Test transformation configuration on sample data"""
     try:
@@ -346,7 +346,7 @@ async def get_mapping_types(
 @router.get("/entities")
 async def get_available_entities(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, List[str]]:
     """Get available source and target entities"""
     try:
@@ -367,43 +367,43 @@ async def get_available_entities(
             detail=str(e)
         )
 
-@router.get("/rules/{rule_id}/preview")
-async def preview_transformation_rule(
-    rule_id: int,
-    sample_data: Dict[str, Any] = Query(..., description="Sample data for preview"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """Preview how a transformation rule would transform sample data"""
-    try:
-        transformation_service = TransformationService(db)
+# @router.get("/rules/{rule_id}/preview")
+# async def preview_transformation_rule(
+#     rule_id: UUID,
+#     sample_data: Dict[str, Any] = Query(..., description="Sample data for preview"),
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_session_dependency)
+# ) -> Dict[str, Any]:
+#     """Preview how a transformation rule would transform sample data"""
+#     pass
+#     try:
+#         transformation_service = TransformationService(db)
         
-        # Get the rule
-        rules = await transformation_service.get_transformation_rules()
-        rule = next((r for r in rules if r.get('rule_id') == rule_id), None)
+#         # Get the rule
+#         rules = await transformation_service.get_transformation_rules()
+#         rule = next((r for r in rules if r.get('rule_id') == rule_id), None)
         
-        if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Transformation rule not found"
-            )
+#         if not rule:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail="Transformation rule not found"
+#             )
         
-        # Apply rule to sample data
-        result = await transformation_service.test_transformation(
-            sample_data=[sample_data],
-            transformation_config={"transformation_rules": [rule]}
-        )
+#         # Apply rule to sample data
+#         result = await transformation_service.test_transformation(
+#             sample_data=[sample_data],
+#             transformation_config={"transformation_rules": [rule]}
+#         )
         
-        return {
-            "original_data": sample_data,
-            "transformed_data": result.get("transformed_samples", [{}])[0] if result.get("transformed_samples") else {},
-            "rule_applied": rule
-        }
+#         return {
+#             "original_data": sample_data,
+#             "transformed_data": result.get("transformed_samples", [{}])[0] if result.get("transformed_samples") else {},
+#             "rule_applied": rule
+#         }
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail=str(e)
+#         )
+    

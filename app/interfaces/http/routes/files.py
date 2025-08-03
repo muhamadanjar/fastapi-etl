@@ -112,7 +112,7 @@ async def process_file(
 
 @router.delete("/{file_id}")
 async def delete_file(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
@@ -136,7 +136,7 @@ async def delete_file(
 
 @router.get("/{file_id}/download")
 async def download_file(
-    file_id: int,
+    file_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ):
