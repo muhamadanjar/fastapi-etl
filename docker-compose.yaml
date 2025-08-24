@@ -4,53 +4,33 @@ version: '3.8'
 services:
   api:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile
     ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/etl_db
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASSWORD=guest
-      - SECRET_KEY=your-secret-key
+      - "8007:8000"
+    env_file:
+      - .env
     depends_on:
-      - db
       - redis
       - rabbitmq
     restart: on-failure
-    volumes:
-      - ../:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/etl_db
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASSWORD=guest
-      - SECRET_KEY=your-secret-key
+    env_file:
+      - .env
     depends_on:
-      - db
       - redis
       - rabbitmq
       - api
-    volumes:
-      - ../:/app
     command: celery -A app.infrastructure.celery.celery_app worker --loglevel=info
 
   celery_flower:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile
     ports:
       - "5555:5555"
@@ -63,16 +43,6 @@ services:
       - redis
     command: celery -A app.infrastructure.celery.celery_app flower --port=5555
 
-  db:
-    image: postgres:14
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=etl_db
-    ports:
-      - "5432:5432"
 
   redis:
     image: redis:7
