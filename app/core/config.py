@@ -155,7 +155,7 @@ class Settings(BaseSettings):
     PORT: int = Field(default=8000, env="PORT")
 
     redis_url: Optional[str] = Field(env="REDIS_URL", default=None)
-    database_url: str = Field(default="postgresql://user:password@db:5432/etl_db", env="DATABASE_URL")
+    database_url: str = Field(default=os.environ.get("DATABASE_URL"), env="DATABASE_URL")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
     database_pool_size: int = Field(default=5, env="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
