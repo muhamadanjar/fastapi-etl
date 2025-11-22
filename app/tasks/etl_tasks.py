@@ -5,6 +5,7 @@ import asyncio
 import os
 import json
 import shutil
+import traceback
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -109,21 +110,87 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
             logger.info(f"File processing completed for {file_id}: {processing_results}")
             
             return {
-                'status': 'success',
                 'file_id': file_id,
-                'task_id': task_id,
-                'processing_results': processing_results,
-                'completed_at': datetime.utcnow().isoformat()
+                'status': 'completed',
+                'results': processing_results
             }
+            
+    except FileProcessingException as e:
+        logger.error(f"File processing failed for {file_id}: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.PROCESSING_ERROR,
+                    error_severity=get_error_severity_from_exception(e),
+                    context={
+                        "file_id": file_id,
+                        "task_id": task_id,
+                        "file_type": file_type if 'file_type' in locals() else None
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
+        # Update file status
+        try:
+            with get_session() as db:
+                # Re-fetch file_record if it wasn't set or was from a closed session
+                if file_record is None or not db.is_active:
+                    file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
+                
+                if file_record:
+                    file_record.processing_status = ProcessingStatus.FAILED.value
+                    metadata = file_record.file_metadata or {}
+                    metadata.update({
+                        'error': str(e),
+                        'failed_at': datetime.utcnow().isoformat(),
+                        'task_id': task_id
+                    })
+                    file_record.file_metadata = metadata
+                    db.add(file_record)
+                    db.commit()
+        except Exception as commit_error:
+            logger.error(f"Failed to update file status after FileProcessingException: {commit_error}")
+        
+        # Retry the task if retries are available
+        if self.request.retries < self.max_retries:
+            logger.info(f"Retrying file processing for {file_id} (attempt {self.request.retries + 1})")
+            raise self.retry(exc=e, countdown=self.default_retry_delay)
+        
+        raise ETLException(f"File processing failed after {self.max_retries} retries: {str(e)}")
         
     except Exception as e:
-        logger.error(f"File processing failed for {file_id}: {str(e)}")
+        logger.error(f"Unexpected error in file processing for {file_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        
+        # Log error to database
+        try:
+            from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+            from app.infrastructure.db.models.etl_control.error_logs import ErrorType
+            
+            asyncio.run(log_task_error(
+                db=db,
+                exception=e,
+                error_type=ErrorType.SYSTEM_ERROR,
+                error_severity=get_error_severity_from_exception(e),
+                context={
+                    "file_id": file_id,
+                    "task_id": task_id
+                }
+            ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
         
         # Update file status to failed
         try:
             with get_session() as db:
-                if 'file_record' in locals():
-                    file_record.processing_status = 'FAILED'
+                file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
+                if file_record:
+                    file_record.processing_status = ProcessingStatus.FAILED.value
                     metadata = file_record.file_metadata or {}
                     metadata.update({
                         'error': str(e),
@@ -353,6 +420,18 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
         execution.records_failed = result.get('records_failed', 0)
         execution.execution_log = json.dumps(result.get('logs', []))
         
+        # Mark execution as successful
+        execution.status = 'SUCCESS'
+        execution.end_time = datetime.utcnow()
+        # The following lines are redundant if result.get(...) is used above,
+        # and `total_processed` etc. are not defined.
+        # Assuming the intent was to use the values from `result`
+        # and the user provided a partial snippet for the dependent job logic.
+        # Keeping the original `result.get` assignments and adding the new logic.
+        # If `total_processed` etc. were meant to be new variables, they need definition.
+        # For now, I will assume the user wants to keep the existing `result.get` assignments
+        # and add the dependent job triggering.
+        
         # Update performance metrics
         performance_metrics = execution.performance_metrics or {}
         performance_metrics.update(result.get('performance_metrics', {}))
@@ -361,15 +440,43 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
         db.add(execution)
         db.commit()
         
-        logger.info(f"ETL job execution completed: {job_id}")
+        logger.info(f"ETL job {job_id} completed successfully")
+        
+        # Trigger dependent jobs if any
+        triggered_result = {'total_triggered': 0} # Initialize to avoid NameError if trigger fails
+        try:
+            from app.tasks.task_helpers import trigger_dependent_jobs
+            import asyncio
+            import traceback
+            
+            logger.info(f"Checking for dependent jobs of {job_id}")
+            triggered_result = asyncio.run(trigger_dependent_jobs(
+                db=db,
+                parent_job_id=job_id,
+                parent_execution_status='SUCCESS'
+            ))
+            
+            if triggered_result.get('total_triggered', 0) > 0:
+                logger.info(
+                    f"Triggered {triggered_result['total_triggered']} dependent jobs: "
+                    f"{[j['child_job_id'] for j in triggered_result.get('triggered_jobs', [])]}"
+                )
+            else:
+                logger.info(f"No dependent jobs to trigger for job {job_id}")
+                
+        except Exception as trigger_error:
+            # Don't fail the main job if dependent job triggering fails
+            logger.error(f"Failed to trigger dependent jobs: {trigger_error}")
+            logger.error(traceback.format_exc())
         
         return {
             'status': 'success',
             'job_id': job_id,
             'execution_id': execution_id,
             'task_id': task_id,
-            'result': result,
-            'completed_at': datetime.utcnow().isoformat()
+            'result': result, # Keeping original 'result' key
+            'completed_at': datetime.utcnow().isoformat(),
+            'dependent_jobs_triggered': triggered_result.get('total_triggered', 0) if 'triggered_result' in locals() else 0
         }
         
     except Exception as e:

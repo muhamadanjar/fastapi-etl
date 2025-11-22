@@ -63,6 +63,8 @@ class ETLService(BaseService):
         """Execute an ETL job."""
         try:
             from app.tasks.etl_tasks import execute_etl_job
+            from app.services.dependency_service import DependencyService
+            
             self.log_operation("execute_job", {"job_id": job_id})
             
             job = self.db_session.get(EtlJob, job_id)
@@ -71,6 +73,21 @@ class ETLService(BaseService):
             
             if not job.is_active:
                 raise ETLError("Job is not active")
+            
+            # Check dependencies
+            dependency_service = DependencyService(self.db_session)
+            dep_status = await dependency_service.check_dependencies_met(job_id)
+            
+            if not dep_status["dependencies_met"]:
+                unmet = dep_status["unmet_dependencies"]
+                unmet_details = ", ".join([
+                    f"{dep['parent_job_name']} ({dep['reason']})" 
+                    for dep in unmet
+                ])
+                raise ETLError(
+                    f"Cannot execute job: dependencies not met. "
+                    f"Unmet dependencies: {unmet_details}"
+                )
             
             batch_id = self._generate_batch_id()
             
@@ -101,7 +118,9 @@ class ETLService(BaseService):
                 "job_id": job_id,
                 "batch_id": batch_id,
                 "status": "started",
-                "task_id": task_result.id
+                "task_id": task_result.id,
+                "dependencies_checked": True,
+                "dependencies_met": dep_status["total_dependencies"]
             }
             
         except Exception as e:

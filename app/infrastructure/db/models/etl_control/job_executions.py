@@ -47,6 +47,17 @@ class JobExecution(JobExecutionBase, table=True):
     
     quality_check_results: List["QualityCheckResult"] = Relationship(back_populates="execution")
     
+    # New relationships for error tracking and performance monitoring
+    error_logs: List["ErrorLog"] = Relationship(
+        back_populates="job_execution",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    
+    performance_metrics_records: List["PerformanceMetric"] = Relationship(
+        back_populates="job_execution",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    
     class Config:
         json_schema_extra = {
             "example": {
@@ -206,3 +217,5 @@ class JobExecutionAlert(SQLModel):
 # Import untuk menghindari circular imports
 from .etl_jobs import EtlJobRead
 from .quality_check_results import QualityCheckResultRead
+from .error_logs import ErrorLog
+from .performance_metrics import PerformanceMetric
