@@ -4,6 +4,8 @@ Cleanup tasks untuk maintenance dan optimasi sistem ETL.
 
 import os
 import shutil
+import asyncio
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -21,6 +23,10 @@ from app.infrastructure.db.models.audit.change_log import ChangeLog
 from app.core.enums import ProcessingStatus, JobStatus
 from app.utils.date_utils import get_current_timestamp
 from app.core.config import get_settings
+
+# Import error logging helpers
+from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+from app.infrastructure.db.models.etl_control.error_logs import ErrorType, ErrorSeverity
 
 logger = get_task_logger(__name__)
 settings = get_settings()
@@ -109,6 +115,23 @@ def cleanup_temporary_files(self, older_than_hours: int = 24) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in cleanup_temporary_files: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "cleanup_temporary_files",
+                        "older_than_hours": older_than_hours
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -217,6 +240,23 @@ def archive_old_data(self, archive_after_days: int = 90) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in archive_old_data: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "archive_old_data",
+                        "archive_after_days": archive_after_days
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -312,6 +352,23 @@ def purge_expired_records(self, retention_days: int = 365) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in purge_expired_records: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.DATABASE_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "purge_expired_records",
+                        "retention_days": retention_days
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -407,6 +464,22 @@ def optimize_database(self) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in optimize_database: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.DATABASE_ERROR,
+                    error_severity=ErrorSeverity.CRITICAL,
+                    context={
+                        "task_name": "optimize_database"
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -511,6 +584,23 @@ def cleanup_failed_jobs(self, older_than_days: int = 7) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in cleanup_failed_jobs: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "cleanup_failed_jobs",
+                        "older_than_days": older_than_days
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -592,6 +682,23 @@ def vacuum_database(self, full_vacuum: bool = False) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in vacuum_database: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.DATABASE_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "vacuum_database",
+                        "full_vacuum": full_vacuum
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -655,6 +762,22 @@ def cleanup_orphaned_files(self) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in cleanup_orphaned_files: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "cleanup_orphaned_files"
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise
 
 
@@ -743,4 +866,21 @@ def reset_stuck_jobs(self, stuck_hours: int = 24) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error in reset_stuck_jobs: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "reset_stuck_jobs",
+                        "stuck_hours": stuck_hours
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise

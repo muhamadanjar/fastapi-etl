@@ -5,6 +5,8 @@ import os
 import psutil
 import json
 import smtplib
+import asyncio
+import traceback
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Any, Optional
@@ -23,6 +25,10 @@ from app.infrastructure.db.models.etl_control.quality_check_results import Quali
 from app.utils.logger import get_logger
 from app.core.config import settings
 from app.core.exceptions import MonitoringException
+
+# Import error logging helpers
+from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+from app.infrastructure.db.models.etl_control.error_logs import ErrorType, ErrorSeverity
 
 logger = get_logger(__name__)
 
@@ -99,6 +105,22 @@ async def health_check_task(self):
         
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            asyncio.run(log_task_error(
+                db=db,
+                exception=e,
+                error_type=ErrorType.SYSTEM_ERROR,
+                error_severity=ErrorSeverity.CRITICAL,
+                context={
+                    "task_name": "health_check_task",
+                    "task_id": task_id
+                }
+            ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         health_status['overall_status'] = 'critical'
         health_status['error'] = str(e)
         return health_status
@@ -148,6 +170,22 @@ async def collect_system_metrics(self):
         
     except Exception as e:
         logger.error(f"Metrics collection failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            asyncio.run(log_task_error(
+                db=db,
+                exception=e,
+                error_type=ErrorType.SYSTEM_ERROR,
+                error_severity=ErrorSeverity.HIGH,
+                context={
+                    "task_name": "collect_system_metrics",
+                    "task_id": task_id
+                }
+            ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise MonitoringException(f"Metrics collection failed: {str(e)}")
     
     finally:
@@ -228,6 +266,23 @@ async def generate_performance_report(self, period_days: int = 7, report_format:
         
     except Exception as e:
         logger.error(f"Performance report generation failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            asyncio.run(log_task_error(
+                db=db,
+                exception=e,
+                error_type=ErrorType.SYSTEM_ERROR,
+                error_severity=ErrorSeverity.MEDIUM,
+                context={
+                    "task_name": "generate_performance_report",
+                    "task_id": task_id,
+                    "period_days": period_days
+                }
+            ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise MonitoringException(f"Performance report generation failed: {str(e)}")
     
     finally:
@@ -350,6 +405,23 @@ def check_job_status(self):
         
     except Exception as e:
         logger.error(f"Job status check failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            with get_session() as error_db:
+                asyncio.run(log_task_error(
+                    db=error_db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "check_job_status",
+                        "task_id": task_id
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise MonitoringException(f"Job status check failed: {str(e)}")
     
     finally:
@@ -435,6 +507,25 @@ async def send_alert_notifications(self, alert_type: str = None, data: Dict[str,
         
     except Exception as e:
         logger.error(f"Alert notification task failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            from app.infrastructure.db.connection import get_session
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "send_alert_notifications",
+                        "task_id": task_id,
+                        "alert_type": alert_type
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise MonitoringException(f"Alert notification failed: {str(e)}")
 
 @celery_app.task(
@@ -500,6 +591,25 @@ async def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None
         
     except Exception as e:
         logger.error(f"Log cleanup failed: {str(e)}")
+        
+        # Log error to database
+        try:
+            from app.infrastructure.db.connection import get_session
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "cleanup_old_logs",
+                        "task_id": task_id,
+                        "days_old": days_old
+                    }
+                ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
+        
         raise MonitoringException(f"Log cleanup failed: {str(e)}")
 
 # Helper functions for monitoring tasks
