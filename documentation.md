@@ -103,6 +103,10 @@ curl -X POST http://localhost:8000/api/v1/files/upload \
 
 ### Step 2: Process Uploaded File
 
+Processing configuration varies by file type. Below are examples for each supported format.
+
+#### 2.1 Process CSV File
+
 ```bash
 POST /files/{file_id}/process
 Authorization: Bearer {token}
@@ -110,34 +114,435 @@ Content-Type: application/json
 
 {
   "processing_config": {
+    "delimiter": ",",           # Delimiter character (default: ",")
+    "encoding": "utf-8",        # File encoding (default: "utf-8")
+    "skip_rows": 0,             # Number of rows to skip (default: 0)
+    "chunk_size": 1000,         # Records per chunk (default: 1000)
+    "has_header": true,         # First row is header (default: true)
+    "quote_char": "\"",         # Quote character (default: "\"")
+    "escape_char": "\\",        # Escape character (default: "\\")
+    "null_values": ["", "NULL", "null", "N/A"]  # Values to treat as null
+  }
+}
+```
+
+**CSV Example with Different Delimiters**:
+
+```bash
+# Semicolon-separated (common in European formats)
+{
+  "processing_config": {
+    "delimiter": ";",
+    "encoding": "utf-8"
+  }
+}
+
+# Tab-separated (TSV)
+{
+  "processing_config": {
+    "delimiter": "\t",
+    "encoding": "utf-8"
+  }
+}
+
+# Pipe-separated
+{
+  "processing_config": {
+    "delimiter": "|",
+    "encoding": "utf-8"
+  }
+}
+```
+
+**CSV with Custom Encoding**:
+```bash
+# For files with special characters
+{
+  "processing_config": {
     "delimiter": ",",
-    "encoding": "utf-8",
-    "skip_rows": 0,
+    "encoding": "latin-1"  # or "iso-8859-1", "windows-1252"
+  }
+}
+```
+
+---
+
+#### 2.2 Process Excel File
+
+```bash
+POST /files/{file_id}/process
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "processing_config": {
+    "sheet_name": "Sheet1",     # Sheet to process (default: first sheet)
+    "skip_rows": 0,             # Rows to skip from top
+    "skip_footer": 0,           # Rows to skip from bottom
+    "use_column_names": true,   # Use first row as column names
+    "chunk_size": 1000,         # Records per chunk
+    "date_format": "%Y-%m-%d",  # Date parsing format
+    "columns": ["A", "B", "C"]  # Specific columns to read (optional)
+  }
+}
+```
+
+**Excel Examples**:
+
+```bash
+# Process specific sheet by name
+{
+  "processing_config": {
+    "sheet_name": "Customer Data",
+    "skip_rows": 2  # Skip first 2 rows (e.g., title and empty row)
+  }
+}
+
+# Process sheet by index (0-based)
+{
+  "processing_config": {
+    "sheet_name": 0,  # First sheet
+    "use_column_names": true
+  }
+}
+
+# Process multiple sheets
+{
+  "processing_config": {
+    "sheet_name": ["Sheet1", "Sheet2"],  # Process multiple sheets
+    "chunk_size": 500
+  }
+}
+
+# Read specific columns only
+{
+  "processing_config": {
+    "sheet_name": "Sales",
+    "columns": ["A", "C", "E", "G"],  # Read columns A, C, E, G only
+    "use_column_names": true
+  }
+}
+```
+
+---
+
+#### 2.3 Process JSON File
+
+```bash
+POST /files/{file_id}/process
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "processing_config": {
+    "json_path": "$",           # JSONPath expression (default: root)
+    "array_path": "data",       # Path to array of records
+    "chunk_size": 1000,         # Records per chunk
+    "flatten_nested": true,     # Flatten nested objects
+    "max_depth": 3,             # Max nesting depth to flatten
+    "date_fields": ["created_at", "updated_at"],  # Fields to parse as dates
+    "encoding": "utf-8"
+  }
+}
+```
+
+**JSON Structure Examples**:
+
+**Simple Array**:
+```json
+// File: customers.json
+[
+  {"id": 1, "name": "John", "email": "john@example.com"},
+  {"id": 2, "name": "Jane", "email": "jane@example.com"}
+]
+```
+```bash
+# Processing config
+{
+  "processing_config": {
+    "json_path": "$",  # Root is already an array
     "chunk_size": 1000
   }
 }
 ```
 
-**Example**:
+**Nested Object with Array**:
+```json
+// File: api_response.json
+{
+  "status": "success",
+  "data": {
+    "customers": [
+      {"id": 1, "name": "John"},
+      {"id": 2, "name": "Jane"}
+    ]
+  }
+}
+```
 ```bash
-curl -X POST http://localhost:8000/api/v1/files/550e8400-e29b-41d4-a716-446655440000/process \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+# Processing config
+{
+  "processing_config": {
+    "array_path": "data.customers",  # Path to the array
+    "chunk_size": 1000
+  }
+}
+```
+
+**Deeply Nested Objects**:
+```json
+// File: complex.json
+{
+  "results": [
+    {
+      "user": {
+        "id": 1,
+        "profile": {
+          "name": "John",
+          "address": {
+            "city": "Jakarta",
+            "country": "Indonesia"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+```bash
+# Processing config with flattening
+{
+  "processing_config": {
+    "array_path": "results",
+    "flatten_nested": true,
+    "max_depth": 3  # Will create: user_id, user_profile_name, user_profile_address_city
+  }
+}
+```
+
+**JSON Lines (NDJSON)**:
+```json
+// File: logs.jsonl (each line is a JSON object)
+{"timestamp": "2025-11-23T10:00:00", "level": "INFO", "message": "Started"}
+{"timestamp": "2025-11-23T10:00:01", "level": "ERROR", "message": "Failed"}
+```
+```bash
+# Processing config
+{
+  "processing_config": {
+    "format": "jsonlines",  # Specify JSONL format
+    "chunk_size": 5000,
+    "date_fields": ["timestamp"]
+  }
+}
+```
+
+---
+
+#### 2.4 Process XML File
+
+```bash
+POST /files/{file_id}/process
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "processing_config": {
+    "root_element": "records",      # Root element containing records
+    "record_element": "record",     # Element representing each record
+    "chunk_size": 1000,             # Records per chunk
+    "namespace_aware": false,       # Handle XML namespaces
+    "flatten_attributes": true,     # Include XML attributes as fields
+    "text_field_name": "_text",     # Field name for element text content
+    "encoding": "utf-8"
+  }
+}
+```
+
+**XML Structure Examples**:
+
+**Simple XML**:
+```xml
+<!-- File: customers.xml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<customers>
+  <customer>
+    <id>1</id>
+    <name>John Doe</name>
+    <email>john@example.com</email>
+  </customer>
+  <customer>
+    <id>2</id>
+    <name>Jane Smith</name>
+    <email>jane@example.com</email>
+  </customer>
+</customers>
+```
+```bash
+# Processing config
+{
+  "processing_config": {
+    "root_element": "customers",
+    "record_element": "customer",
+    "chunk_size": 1000
+  }
+}
+```
+
+**XML with Attributes**:
+```xml
+<!-- File: products.xml -->
+<?xml version="1.0"?>
+<products>
+  <product id="1" category="electronics">
+    <name>Laptop</name>
+    <price currency="USD">999.99</price>
+  </product>
+  <product id="2" category="books">
+    <name>Python Guide</name>
+    <price currency="USD">49.99</price>
+  </product>
+</products>
+```
+```bash
+# Processing config with attributes
+{
+  "processing_config": {
+    "root_element": "products",
+    "record_element": "product",
+    "flatten_attributes": true  # Will create: id, category, name, price, price_currency
+  }
+}
+```
+
+**XML with Namespaces**:
+```xml
+<!-- File: soap_response.xml -->
+<?xml version="1.0"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <m:GetCustomersResponse xmlns:m="http://example.com/customers">
+      <m:Customer>
+        <m:ID>1</m:ID>
+        <m:Name>John</m:Name>
+      </m:Customer>
+    </m:GetCustomersResponse>
+  </soap:Body>
+</soap:Envelope>
+```
+```bash
+# Processing config with namespaces
+{
+  "processing_config": {
+    "root_element": "{http://example.com/customers}GetCustomersResponse",
+    "record_element": "{http://example.com/customers}Customer",
+    "namespace_aware": true,
+    "namespaces": {
+      "soap": "http://schemas.xmlsoap.org/soap/envelope/",
+      "m": "http://example.com/customers"
+    }
+  }
+}
+```
+
+**Nested XML**:
+```xml
+<!-- File: orders.xml -->
+<orders>
+  <order>
+    <id>1</id>
+    <customer>
+      <name>John</name>
+      <email>john@example.com</email>
+    </customer>
+    <items>
+      <item>
+        <product>Laptop</product>
+        <quantity>1</quantity>
+      </item>
+    </items>
+  </order>
+</orders>
+```
+```bash
+# Processing config for nested XML
+{
+  "processing_config": {
+    "root_element": "orders",
+    "record_element": "order",
+    "flatten_nested": true,  # Will flatten customer and items
+    "max_depth": 2
+  }
+}
+```
+
+---
+
+### Complete Processing Examples by Format
+
+#### Example 1: CSV with Custom Settings
+
+```bash
+curl -X POST http://localhost:8000/api/v1/files/$FILE_ID/process \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "processing_config": {
-      "delimiter": ",",
-      "encoding": "utf-8"
+      "delimiter": ";",
+      "encoding": "latin-1",
+      "skip_rows": 1,
+      "has_header": true,
+      "null_values": ["", "N/A", "-"]
     }
   }'
 ```
 
-**Response**:
-```json
-{
-  "task_id": "celery-task-id-123",
-  "status": "processing",
-  "message": "File processing started"
-}
+#### Example 2: Excel Multi-Sheet
+
+```bash
+curl -X POST http://localhost:8000/api/v1/files/$FILE_ID/process \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "processing_config": {
+      "sheet_name": "Sales Data",
+      "skip_rows": 2,
+      "use_column_names": true,
+      "date_format": "%d/%m/%Y"
+    }
+  }'
+```
+
+#### Example 3: JSON API Response
+
+```bash
+curl -X POST http://localhost:8000/api/v1/files/$FILE_ID/process \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "processing_config": {
+      "array_path": "data.results",
+      "flatten_nested": true,
+      "max_depth": 3,
+      "date_fields": ["created_at", "updated_at"]
+    }
+  }'
+```
+
+#### Example 4: XML SOAP Response
+
+```bash
+curl -X POST http://localhost:8000/api/v1/files/$FILE_ID/process \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "processing_config": {
+      "root_element": "{http://example.com}Response",
+      "record_element": "{http://example.com}Record",
+      "namespace_aware": true,
+      "flatten_attributes": true
+    }
+  }'
 ```
 
 ---
@@ -154,11 +559,23 @@ Authorization: Bearer {token}
 {
   "file_id": "550e8400-e29b-41d4-a716-446655440000",
   "filename": "data.csv",
+  "file_type": "csv",
   "processing_status": "COMPLETED",
   "records_processed": 5000,
   "records_successful": 4950,
   "records_failed": 50,
-  "processed_at": "2025-11-22T10:05:00"
+  "processed_at": "2025-11-22T10:05:00",
+  "processing_metadata": {
+    "delimiter_used": ",",
+    "encoding_detected": "utf-8",
+    "columns_found": 15,
+    "data_types": {
+      "id": "integer",
+      "name": "string",
+      "email": "string",
+      "created_at": "datetime"
+    }
+  }
 }
 ```
 
@@ -167,6 +584,59 @@ Authorization: Bearer {token}
 - `PROCESSING` - Currently processing
 - `COMPLETED` - Successfully processed
 - `FAILED` - Processing failed
+
+**Format-Specific Metadata**:
+
+**CSV**:
+```json
+{
+  "processing_metadata": {
+    "delimiter_used": ",",
+    "encoding_detected": "utf-8",
+    "rows_total": 5000,
+    "columns_count": 15,
+    "header_row": ["id", "name", "email", "phone", "address"]
+  }
+}
+```
+
+**Excel**:
+```json
+{
+  "processing_metadata": {
+    "sheets_processed": ["Sheet1", "Sheet2"],
+    "total_sheets": 3,
+    "rows_per_sheet": {"Sheet1": 3000, "Sheet2": 2000},
+    "columns_count": 12
+  }
+}
+```
+
+**JSON**:
+```json
+{
+  "processing_metadata": {
+    "json_structure": "nested_array",
+    "array_path_used": "data.customers",
+    "objects_found": 5000,
+    "max_nesting_depth": 3,
+    "flattened_fields": 25
+  }
+}
+```
+
+**XML**:
+```json
+{
+  "processing_metadata": {
+    "root_element": "customers",
+    "record_element": "customer",
+    "records_found": 5000,
+    "namespaces_detected": ["soap", "xsi"],
+    "attributes_flattened": true
+  }
+}
+```
 
 ---
 
@@ -845,6 +1315,6 @@ DELETE /files/{file_id}
 ## Support
 
 For issues or questions:
-- GitHub: [github.com/your-repo/fastapi-etl](https://github.com)
-- Email: support@example.com
+- GitHub: [github.com/muhamadanjar/fastapi-etl](https://github.com)
+- Email: arvanria@gmail.com
 - Documentation: [docs.example.com](https://docs.example.com)
