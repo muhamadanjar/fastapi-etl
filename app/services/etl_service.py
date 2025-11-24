@@ -17,6 +17,7 @@ from app.core.exceptions import ETLError
 from app.core.enums import JobStatus, JobType
 from app.utils.date_utils import get_current_timestamp
 from app.utils.event_publisher import get_event_publisher
+from app.services.cache_service import get_cache_service
 
 
 class ETLService(BaseService):
@@ -24,6 +25,13 @@ class ETLService(BaseService):
     
     def __init__(self, db_session: Session):
         super().__init__(db_session)
+        self.cache = None  # Will be initialized on first use
+    
+    async def _get_cache(self):
+        """Get cache service instance"""
+        if self.cache is None:
+            self.cache = await get_cache_service()
+        return self.cache
     
     def get_service_name(self) -> str:
         return "ETLService"
@@ -49,6 +57,13 @@ class ETLService(BaseService):
             self.db_session.add(job)
             self.db_session.commit()
             self.db_session.refresh(job)
+            
+            # Invalidate jobs list cache
+            try:
+                cache = await self._get_cache()
+                await cache.clear_namespace("jobs:list")
+            except Exception as cache_error:
+                self.logger.warning(f"Failed to invalidate cache: {str(cache_error)}")
             
             return {
                 "job_id": job.job_id,
@@ -160,6 +175,15 @@ class ETLService(BaseService):
         try:
             self.log_operation("get_job_status", {"job_id": job_id})
             
+            # Try cache first
+            cache = await self._get_cache()
+            cache_key = str(job_id)
+            cached = await cache.get(cache_key, sub_namespace="jobs")
+            if cached:
+                self.logger.debug(f"Cache hit for job {job_id}")
+                return cached
+            
+            # Fetch from DB
             job = self.db_session.get(EtlJob, job_id)
             if not job:
                 raise ETLError("Job not found")
@@ -175,7 +199,7 @@ class ETLService(BaseService):
             
             latest_execution = executions[0] if executions else None
             
-            return {
+            result = {
                 "job_id": job.job_id,
                 "job_name": job.job_name,
                 "job_type": job.job_type,
@@ -184,13 +208,18 @@ class ETLService(BaseService):
                 "latest_execution": {
                     "execution_id": latest_execution.execution_id,
                     "status": latest_execution.status,
-                    "start_time": latest_execution.start_time,
-                    "end_time": latest_execution.end_time,
+                    "start_time": latest_execution.start_time.isoformat() if latest_execution.start_time else None,
+                    "end_time": latest_execution.end_time.isoformat() if latest_execution.end_time else None,
                     "records_processed": latest_execution.records_processed
                 } if latest_execution else None,
                 "recent_executions": len(executions),
                 "success_rate": self._calculate_success_rate(executions)
             }
+            
+            # Cache result (5 minutes TTL from config)
+            await cache.set(cache_key, result, sub_namespace="jobs")
+            
+            return result
             
         except Exception as e:
             self.handle_error(e, "get_job_status")
