@@ -18,7 +18,7 @@ from app.infrastructure.db.models.etl_control.job_dependencies import (
 from pydantic import BaseModel
 
 
-router = APIRouter(prefix="/jobs", tags=["dependencies"])
+router = APIRouter(prefix="/jobs", )
 
 
 class AddDependencyRequest(BaseModel):

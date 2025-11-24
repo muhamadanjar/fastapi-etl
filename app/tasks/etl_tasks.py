@@ -28,6 +28,7 @@ from app.services.file_service import FileService
 from app.services.data_quality_service import DataQualityService
 from app.utils.logger import get_logger
 from app.core.exceptions import ETLException, FileProcessingException
+from app.utils.event_publisher import get_event_publisher
 
 logger = get_logger(__name__)
 
@@ -442,6 +443,23 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
         
         logger.info(f"ETL job {job_id} completed successfully")
         
+        # Publish job completed event
+        try:
+            publisher = asyncio.run(get_event_publisher())
+            asyncio.run(publisher.publish_job_completed(
+                job_id=job.job_id,
+                execution_id=execution.execution_id,
+                job_name=job.job_name,
+                stats={
+                    'records_processed': execution.records_processed,
+                    'records_successful': execution.records_successful,
+                    'records_failed': execution.records_failed,
+                    'duration_seconds': (execution.end_time - execution.start_time).total_seconds()
+                }
+            ))
+        except Exception as pub_error:
+            logger.warning(f"Failed to publish job completed event: {str(pub_error)}")
+        
         # Trigger dependent jobs if any
         triggered_result = {'total_triggered': 0} # Initialize to avoid NameError if trigger fails
         try:
@@ -496,8 +514,40 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
                 execution.error_details = error_details
                 db.add(execution)
                 db.commit()
+                
+                # Publish job failed event
+                try:
+                    publisher = asyncio.run(get_event_publisher())
+                    asyncio.run(publisher.publish_job_failed(
+                        job_id=job.job_id if 'job' in locals() else job_id,
+                        execution_id=execution.execution_id,
+                        job_name=job.job_name if 'job' in locals() else "Unknown",
+                        error=str(e)
+                    ))
+                except Exception as pub_error:
+                    logger.warning(f"Failed to publish job failed event: {str(pub_error)}")
+                    
         except Exception as commit_error:
             logger.error(f"Failed to update execution status: {commit_error}")
+        
+        # Log error to database
+        try:
+            from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+            from app.infrastructure.db.models.etl_control.error_logs import ErrorType
+            
+            asyncio.run(log_task_error(
+                db=db,
+                exception=e,
+                error_type=get_error_type_from_exception(e),
+                error_severity=get_error_severity_from_exception(e),
+                context={
+                    "job_id": job_id,
+                    "execution_id": execution_id if 'execution_id' in locals() else None,
+                    "task_id": task_id
+                }
+            ))
+        except Exception as log_error:
+            logger.error(f"Failed to log error to database: {log_error}")
         
         # Retry if retries available
         if self.request.retries < self.max_retries:

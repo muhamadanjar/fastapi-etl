@@ -18,7 +18,7 @@ from app.infrastructure.db.models.etl_control.error_logs import (
 from pydantic import BaseModel
 
 
-router = APIRouter(prefix="/errors", tags=["errors"])
+router = APIRouter(prefix="/errors", )
 
 
 class ErrorResponse(BaseModel):
