@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.infrastructure.db.session import get_db
+from app.infrastructure.db.connection import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.services.dependency_service import DependencyService, DependencyError
 from app.infrastructure.db.models.etl_control.job_dependencies import (
@@ -39,7 +39,7 @@ class DependencyResponse(BaseModel):
 async def get_job_dependencies(
     job_id: UUID,
     include_inactive: bool = False,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -68,7 +68,7 @@ async def get_job_dependencies(
 async def add_job_dependency(
     job_id: UUID,
     request: AddDependencyRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -107,7 +107,7 @@ async def add_job_dependency(
 async def remove_job_dependency(
     job_id: UUID,
     dependency_id: UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -139,7 +139,7 @@ async def remove_job_dependency(
 @router.get("/{job_id}/dependencies/check", response_model=DependencyResponse)
 async def check_dependencies(
     job_id: UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -168,7 +168,7 @@ async def check_dependencies(
 async def get_dependency_tree(
     job_id: UUID,
     max_depth: int = 10,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -194,7 +194,7 @@ async def get_dependency_tree(
 
 @router.get("/executable", response_model=DependencyResponse)
 async def get_executable_jobs(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """

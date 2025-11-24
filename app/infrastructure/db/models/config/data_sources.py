@@ -81,7 +81,7 @@ class DataSourceBase(BaseModel):
         default=3,
         description="Number of retry attempts for failed connections"
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    source_metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSONB),
         description="Additional metadata"

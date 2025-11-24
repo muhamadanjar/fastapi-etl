@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
-from app.infrastructure.db.session import get_db
+from app.infrastructure.db import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.services.error_service import ErrorService
 from app.infrastructure.db.models.etl_control.error_logs import (
@@ -43,7 +43,7 @@ async def get_errors(
     end_date: Optional[datetime] = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -86,7 +86,7 @@ async def get_job_errors(
     job_id: UUID,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -140,7 +140,7 @@ async def get_execution_errors(
     execution_id: UUID,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -170,7 +170,7 @@ async def get_execution_errors(
 async def resolve_error(
     error_id: UUID,
     request: ResolveErrorRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -199,7 +199,7 @@ async def resolve_error(
 async def get_error_summary(
     job_execution_id: Optional[UUID] = Query(None),
     days: int = Query(7, ge=1, le=90),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -229,7 +229,7 @@ async def get_error_summary(
 @router.get("/trends", response_model=ErrorResponse)
 async def get_error_trends(
     days: int = Query(30, ge=1, le=365),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_session_dependency),
     current_user: dict = Depends(get_current_user)
 ):
     """

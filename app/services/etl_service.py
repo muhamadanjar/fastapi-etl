@@ -4,6 +4,7 @@ Fokus pada job management dan execution control.
 """
 
 import uuid
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.core.exceptions import ETLError
 from app.core.enums import JobStatus, JobType
 from app.utils.date_utils import get_current_timestamp
+from app.utils.event_publisher import get_event_publisher
 
 
 class ETLService(BaseService):
@@ -98,33 +100,59 @@ class ETLService(BaseService):
                 status=JobStatus.RUNNING.value,
                 records_processed=0,
                 records_successful=0,
-                records_failed=0
+                records_failed=0,
+                execution_metadata=parameters or {}
             )
             
             self.db_session.add(execution)
             self.db_session.commit()
             self.db_session.refresh(execution)
             
-            # Execute job asynchronously menggunakan Celery
-            task_result = execute_etl_job.delay(
-                job_id=job_id,
-                execution_id=execution.execution_id,
-                batch_id=batch_id,
-                parameters=parameters or {}
+            # Publish job started event
+            try:
+                publisher = await get_event_publisher()
+                await publisher.publish_job_started(
+                    job_id=job_id,
+                    execution_id=execution.id,
+                    job_name=job.job_name,
+                    job_type=job.job_type
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to publish job started event: {str(e)}")
+            
+            # Trigger async Celery task
+            task = execute_etl_job.delay(
+                str(job_id),
+                str(execution.id),
+                batch_id,
+                parameters or {}
             )
             
             return {
-                "execution_id": execution.execution_id,
+                "execution_id": execution.id,
                 "job_id": job_id,
+                "job_name": job.job_name,
                 "batch_id": batch_id,
-                "status": "started",
-                "task_id": task_result.id,
-                "dependencies_checked": True,
-                "dependencies_met": dep_status["total_dependencies"]
+                "status": JobStatus.RUNNING.value,
+                "task_id": task.id,
+                "message": "Job execution started"
             }
             
         except Exception as e:
             self.db_session.rollback()
+            
+            # Publish job failed event
+            try:
+                publisher = await get_event_publisher()
+                await publisher.publish_job_failed(
+                    job_id=job_id,
+                    execution_id=execution.id if 'execution' in locals() else None,
+                    job_name=job.job_name if 'job' in locals() else "Unknown",
+                    error=str(e)
+                )
+            except Exception as pub_error:
+                self.logger.warning(f"Failed to publish job failed event: {str(pub_error)}")
+            
             self.handle_error(e, "execute_job")
     
     async def get_job_status(self, job_id: int) -> Dict[str, Any]:

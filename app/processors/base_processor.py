@@ -14,6 +14,7 @@ from app.core.exceptions import FileProcessingException
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
+from app.services.rejected_records_service import RejectedRecordsService
 
 logger = get_logger(__name__)
 
@@ -112,11 +113,15 @@ class BaseProcessor(ABC):
             "total_records": 0,
             "successful_records": 0,
             "failed_records": 0,
+            "rejected_records": 0,
             "validation_errors": [],
             "processing_time": 0
         }
         
         start_time = datetime.utcnow()
+        
+        # Initialize rejected records service
+        rejected_service = RejectedRecordsService(self.db_session)
         
         try:
             for row_number, record in enumerate(records, 1):
@@ -146,13 +151,31 @@ class BaseProcessor(ABC):
                     else:
                         processing_stats["failed_records"] += 1
                         processing_stats["validation_errors"].extend(validation_result["errors"])
+                        
+                        # Store rejected record
+                        try:
+                            await rejected_service.store_rejected_record(
+                                source_file_id=file_registry.id,
+                                raw_data=record,
+                                rejection_reason="; ".join(validation_result["errors"][:3]),  # First 3 errors
+                                row_number=row_number,
+                                validation_errors=[
+                                    {"field": "record", "error": err}
+                                    for err in validation_result["errors"]
+                                ],
+                                batch_id=self.batch_id,
+                                can_retry=True
+                            )
+                            processing_stats["rejected_records"] += 1
+                        except Exception as e:
+                            self.logger.warning(f"Failed to store rejected record: {str(e)}")
                     
                     processing_stats["total_records"] += 1
                     
                     # Commit in batches for performance
                     if row_number % 1000 == 0:
                         self.db_session.commit()
-                        self.logger.info(f"Processed {row_number} records")
+                        self.logger.info(f"Processed {row_number} records ({processing_stats['rejected_records']} rejected)")
                 
                 except Exception as e:
                     processing_stats["failed_records"] += 1
