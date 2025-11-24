@@ -17,7 +17,7 @@ from app.core.exceptions import ETLError
 from app.core.enums import JobStatus, JobType
 from app.utils.date_utils import get_current_timestamp
 from app.utils.event_publisher import get_event_publisher
-from app.services.cache_service import get_cache_service
+from app.infrastructure.cache import cache_manager
 
 
 class ETLService(BaseService):
@@ -25,13 +25,6 @@ class ETLService(BaseService):
     
     def __init__(self, db_session: Session):
         super().__init__(db_session)
-        self.cache = None  # Will be initialized on first use
-    
-    async def _get_cache(self):
-        """Get cache service instance"""
-        if self.cache is None:
-            self.cache = await get_cache_service()
-        return self.cache
     
     def get_service_name(self) -> str:
         return "ETLService"
@@ -58,12 +51,16 @@ class ETLService(BaseService):
             self.db_session.commit()
             self.db_session.refresh(job)
             
-            # Invalidate jobs list cache
-            try:
-                cache = await self._get_cache()
-                await cache.clear_namespace("jobs:list")
-            except Exception as cache_error:
-                self.logger.warning(f"Failed to invalidate cache: {str(cache_error)}")
+            # Invalidate jobs list cache using existing infrastructure
+            cache = await cache_manager.get_cache()
+            if cache:
+                try:
+                    # Clear all jobs:* keys
+                    keys = await cache.scan_keys("jobs:*")
+                    if keys:
+                        await cache.delete(*keys)
+                except Exception as cache_error:
+                    self.logger.warning(f"Failed to invalidate cache: {str(cache_error)}")
             
             return {
                 "job_id": job.job_id,
@@ -175,13 +172,17 @@ class ETLService(BaseService):
         try:
             self.log_operation("get_job_status", {"job_id": job_id})
             
-            # Try cache first
-            cache = await self._get_cache()
-            cache_key = str(job_id)
-            cached = await cache.get(cache_key, sub_namespace="jobs")
-            if cached:
-                self.logger.debug(f"Cache hit for job {job_id}")
-                return cached
+            # Try cache first using existing infrastructure
+            cache = await cache_manager.get_cache()
+            if cache:
+                cache_key = f"jobs:{job_id}"
+                try:
+                    cached = await cache.get(cache_key)
+                    if cached:
+                        self.logger.debug(f"Cache hit for job {job_id}")
+                        return cached
+                except Exception as cache_error:
+                    self.logger.warning(f"Cache get error: {str(cache_error)}")
             
             # Fetch from DB
             job = self.db_session.get(EtlJob, job_id)
@@ -216,8 +217,12 @@ class ETLService(BaseService):
                 "success_rate": self._calculate_success_rate(executions)
             }
             
-            # Cache result (5 minutes TTL from config)
-            await cache.set(cache_key, result, sub_namespace="jobs")
+            # Cache result (5 minutes TTL)
+            if cache:
+                try:
+                    await cache.set(cache_key, result, ttl=300)
+                except Exception as cache_error:
+                    self.logger.warning(f"Cache set error: {str(cache_error)}")
             
             return result
             

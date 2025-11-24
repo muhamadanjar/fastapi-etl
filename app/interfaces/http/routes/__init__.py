@@ -11,7 +11,6 @@ from .entities import router as entities_router
 from .errors import router as errors_router
 from .rejected_records import router as rejected_records_router
 from .metrics import router as metrics_router
-from .cache import router as cache_router
 # from .reports import router as reports_router
 
 api_router = APIRouter()
@@ -28,5 +27,4 @@ api_router.include_router(data_quality_router, prefix="/data-quality", tags=["Da
 api_router.include_router(entities_router, prefix="/entities", tags=["Entity Management"])
 api_router.include_router(rejected_records_router, prefix="/rejected-records", tags=["Rejected Records"])
 api_router.include_router(metrics_router, tags=["Performance Metrics"])  # No prefix, uses /metrics from router
-api_router.include_router(cache_router, tags=["Cache Management"])  # No prefix, uses /cache from router
 # api_router.include_router(reports_router, prefix="/reports", tags=["Reports"])
