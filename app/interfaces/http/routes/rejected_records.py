@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app.infrastructure.db.connection import get_session
+from app.infrastructure.db.connection import get_session_dependency
 from app.services.rejected_records_service import RejectedRecordsService
 from app.infrastructure.db.models.raw_data.rejected_records import (
     RejectedRecord,
@@ -17,7 +17,7 @@ from app.infrastructure.db.models.raw_data.rejected_records import (
 from app.interfaces.dependencies import get_current_user
 from app.core.response import APIResponse
 
-router = APIRouter(prefix="/rejected-records", tags=["Rejected Records"])
+router = APIRouter(tags=["Rejected Records"])
 
 
 @router.get("", response_model=APIResponse[List[RejectedRecordRead]])
@@ -28,7 +28,7 @@ async def list_rejected_records(
     can_retry: Optional[bool] = Query(None, description="Filter by retry capability"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -45,7 +45,8 @@ async def list_rejected_records(
             offset=offset
         )
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=records,
             message=f"Retrieved {len(records)} rejected records"
         )
@@ -59,7 +60,7 @@ async def get_file_rejected_records(
     file_id: UUID,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -73,7 +74,8 @@ async def get_file_rejected_records(
             offset=offset
         )
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=records,
             message=f"Retrieved {len(records)} rejected records for file {file_id}"
         )
@@ -86,7 +88,7 @@ async def get_file_rejected_records(
 async def get_rejection_summary(
     source_file_id: Optional[UUID] = Query(None),
     batch_id: Optional[str] = Query(None),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -99,7 +101,8 @@ async def get_rejection_summary(
             batch_id=batch_id
         )
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=summary,
             message="Rejection summary generated successfully"
         )
@@ -112,7 +115,7 @@ async def get_rejection_summary(
 async def mark_record_resolved(
     rejection_id: UUID,
     resolved: bool = Query(True, description="Mark as resolved or unresolved"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -122,7 +125,8 @@ async def mark_record_resolved(
         service = RejectedRecordsService(db)
         record = await service.mark_as_resolved(rejection_id, resolved)
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=record,
             message=f"Record marked as {'resolved' if resolved else 'unresolved'}"
         )
@@ -134,7 +138,7 @@ async def mark_record_resolved(
 @router.post("/{rejection_id}/retry", response_model=APIResponse[RejectedRecordRead])
 async def retry_rejected_record(
     rejection_id: UUID,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -144,7 +148,8 @@ async def retry_rejected_record(
         service = RejectedRecordsService(db)
         record = await service.retry_rejected_record(rejection_id)
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=record,
             message=f"Retry count incremented to {record.retry_count}"
         )
@@ -156,7 +161,7 @@ async def retry_rejected_record(
 @router.delete("/{rejection_id}", response_model=APIResponse[bool])
 async def delete_rejected_record(
     rejection_id: UUID,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -166,7 +171,8 @@ async def delete_rejected_record(
         service = RejectedRecordsService(db)
         success = await service.delete_rejected_record(rejection_id)
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=success,
             message="Rejected record deleted successfully"
         )
@@ -180,7 +186,7 @@ async def export_rejected_records(
     source_file_id: Optional[UUID] = Query(None),
     batch_id: Optional[str] = Query(None),
     format: str = Query("csv", regex="^(csv|json)$"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -194,7 +200,8 @@ async def export_rejected_records(
             format=format
         )
         
-        return APIResponse.success(
+        return APIResponse(
+            success=True,
             data=filepath,
             message=f"Rejected records exported to {filepath}"
         )

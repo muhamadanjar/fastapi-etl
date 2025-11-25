@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from app.interfaces.dependencies import get_db, get_current_user
+from sqlmodel import Session
+from app.interfaces.dependencies import get_current_user
+from app.infrastructure.db.connection import get_session_dependency
 from app.schemas.entity_schemas import (
     EntityCreate, EntityUpdate, EntityResponse, EntityRelationshipResponse,
     EntitySearchRequest, EntityMergeRequest
@@ -17,7 +18,7 @@ router = APIRouter()
 async def create_entity(
     entity_data: EntityCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> EntityResponse:
     """Create a new entity"""
     entity_service = EntityService(db)
@@ -31,7 +32,7 @@ async def list_entities(
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[EntityResponse]:
     """List entities with pagination and filters"""
     entity_service = EntityService(db)
@@ -41,7 +42,7 @@ async def list_entities(
 async def get_entity(
     entity_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> EntityResponse:
     """Get specific entity by ID"""
     entity_service = EntityService(db)
@@ -58,7 +59,7 @@ async def update_entity(
     entity_id: UUID,
     entity_data: EntityUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> EntityResponse:
     """Update entity data"""
     entity_service = EntityService(db)
@@ -69,7 +70,7 @@ async def update_entity(
 async def delete_entity(
     entity_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Delete entity (soft delete)"""
     entity_service = EntityService(db)
@@ -80,7 +81,7 @@ async def delete_entity(
 async def search_entities(
     search_request: EntitySearchRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[EntityResponse]:
     """Advanced entity search with filters and full-text search"""
     entity_service = EntityService(db)
@@ -91,7 +92,7 @@ async def get_entity_relationships(
     entity_id: UUID,
     relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[EntityRelationshipResponse]:
     """Get entity relationships"""
     entity_service = EntityService(db)
@@ -105,7 +106,7 @@ async def create_entity_relationship(
     relationship_strength: Optional[float] = Query(1.0, ge=0.0, le=1.0),
     metadata: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Create relationship between entities"""
     entity_service = EntityService(db)
@@ -118,7 +119,7 @@ async def create_entity_relationship(
 async def merge_entities(
     merge_request: EntityMergeRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Merge multiple entities into one"""
     entity_service = EntityService(db)
@@ -128,7 +129,7 @@ async def merge_entities(
 @router.get("/types")
 async def get_entity_types(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[Dict[str, Any]]:
     """Get list of available entity types with counts"""
     entity_service = EntityService(db)
@@ -140,7 +141,7 @@ async def get_entity_history(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[Dict[str, Any]]:
     """Get entity change history"""
     entity_service = EntityService(db)
@@ -151,7 +152,7 @@ async def check_for_duplicates(
     entity_id: UUID,
     threshold: float = Query(0.8, ge=0.0, le=1.0, description="Similarity threshold"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[Dict[str, Any]]:
     """Check for potential duplicate entities"""
     entity_service = EntityService(db)

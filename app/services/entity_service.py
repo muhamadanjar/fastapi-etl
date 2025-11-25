@@ -47,9 +47,9 @@ class EntityService(BaseService):
                 is_active=True
             )
             
-            self.db_session.add(entity)
-            self.db_session.commit()
-            self.db_session.refresh(entity)
+            self.db.add(entity)
+            self.db.commit()
+            self.db.refresh(entity)
             
             return {
                 "entity_id": entity.entity_id,
@@ -60,7 +60,7 @@ class EntityService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_entity")
     
     async def get_entity_by_id(self, entity_id: int) -> Optional[Dict[str, Any]]:
@@ -68,7 +68,7 @@ class EntityService(BaseService):
         try:
             self.log_operation("get_entity_by_id", {"entity_id": entity_id})
             
-            entity = self.db_session.get(Entity, entity_id)
+            entity = self.db.get(Entity, entity_id)
             if not entity:
                 return None
             
@@ -98,7 +98,7 @@ class EntityService(BaseService):
                 Entity.is_active == True
             ))
             
-            entity = self.db_session.execute(stmt).scalar_one_or_none()
+            entity = self.db.execute(stmt).scalar_one_or_none()
             if not entity:
                 return None
             
@@ -122,7 +122,7 @@ class EntityService(BaseService):
         try:
             self.log_operation("update_entity", {"entity_id": entity_id})
             
-            entity = self.db_session.get(Entity, entity_id)
+            entity = self.db.get(Entity, entity_id)
             if not entity:
                 raise EntityError("Entity not found")
             
@@ -138,7 +138,7 @@ class EntityService(BaseService):
             entity.version += 1
             entity.last_updated = get_current_timestamp()
             
-            self.db_session.commit()
+            self.db.commit()
             
             return {
                 "entity_id": entity.entity_id,
@@ -149,7 +149,7 @@ class EntityService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "update_entity")
     
     async def delete_entity(self, entity_id: int, hard_delete: bool = False) -> bool:
@@ -157,7 +157,7 @@ class EntityService(BaseService):
         try:
             self.log_operation("delete_entity", {"entity_id": entity_id, "hard_delete": hard_delete})
             
-            entity = self.db_session.get(Entity, entity_id)
+            entity = self.db.get(Entity, entity_id)
             if not entity:
                 raise EntityError("Entity not found")
             
@@ -165,17 +165,17 @@ class EntityService(BaseService):
                 # Delete all relationships
                 await self._delete_entity_relationships(entity_id)
                 # Delete entity
-                self.db_session.delete(entity)
+                self.db.delete(entity)
             else:
                 # Soft delete
                 entity.is_active = False
                 entity.last_updated = get_current_timestamp()
             
-            self.db_session.commit()
+            self.db.commit()
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "delete_entity")
     
     async def get_entities_list(
