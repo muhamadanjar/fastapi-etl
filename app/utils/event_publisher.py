@@ -30,7 +30,7 @@ class EventPublisher:
         Args:
             redis_url: Redis connection URL (defaults to settings)
         """
-        self.redis_url = redis_url or settings.CELERY_BROKER_URL
+        self.redis_url = redis_url or settings.celery_settings.broker_url
         self.redis_client: Optional[redis.Redis] = None
         self.logger = logger
         self._connected = False

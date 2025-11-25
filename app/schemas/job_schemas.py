@@ -217,13 +217,22 @@ class JobBatchOperationResponse(BaseResponse):
     failed_operations: int
     operation_details: List[Dict[str, Any]]
 
-class JobResponse(BaseResponse):
+class JobResponse(BaseModel):
     """Schema for job response."""
     job_id: UUID
     job_name: str
-    status: JobStatus
-    message: Optional[str] = None
-    data: Optional[Dict[str, Any]] = None
+    job_type: JobType
+    job_category: JobCategory
+    source_type: SourceType
+    target_schema: Optional[str] = None
+    target_table: Optional[str] = None
+    job_config: Optional[Dict[str, Any]] = None
+    schedule_expression: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True  # Pydantic v2 style (replaces orm_mode)
 
 class JobScheduleCreate(BaseModel):
     """Schema for creating a job schedule."""

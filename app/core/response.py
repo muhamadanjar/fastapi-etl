@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Generic, Optional, TypeVar, Any
 
 # Use Any instead of SQLModel for more flexibility
@@ -7,12 +7,11 @@ DataType = TypeVar("DataType")
 class APIResponse(BaseModel, Generic[DataType]):
     """Standard API response wrapper"""
     
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     message: str = Field(..., description="Response message")
     data: Optional[DataType] = Field(default=None, description="Response data")
     success: bool = Field(default=True, description="Success status")
-    
-    class Config:
-        arbitrary_types_allowed = True
 
     @staticmethod
     def success(message: str = "Success", data: Optional[DataType] = None) -> "APIResponse[DataType]":

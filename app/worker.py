@@ -24,8 +24,8 @@ settings = get_settings()
 
 # Configure Celery
 celery_app.conf.update(
-    broker_url=settings.CELERY_BROKER_URL,
-    result_backend=settings.CELERY_RESULT_BACKEND,
+    broker_url=settings.celery_settings.broker_url,
+    result_backend=settings.celery_settings.result_backend,
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',

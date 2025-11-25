@@ -36,6 +36,7 @@ async def get_current_user(
             settings.security.secret_key,
             algorithms=[settings.security.algorithm]
         )
+        print("payload",payload)
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(

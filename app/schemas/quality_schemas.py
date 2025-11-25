@@ -15,6 +15,7 @@ class QualityRuleResponse(BaseModel):
     is_active: bool = True
     created_at: datetime
 
+
 class QualityRuleCreate(BaseModel):
     rule_name: str
     rule_type: Optional[str] = None
@@ -24,16 +25,10 @@ class QualityRuleCreate(BaseModel):
     error_threshold: Optional[float] = None
     is_active: Optional[bool] = True
 
+
 class QualityRuleRead(QualityRuleCreate):
     rule_id: UUID
     created_at: datetime
-
-
-# app/schemas/quality_check_result_schemas.py
-from typing import Optional
-from datetime import datetime
-from pydantic import BaseModel
-
 
 
 class QualityCheckResultCreate(BaseModel):

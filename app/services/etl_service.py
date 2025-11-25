@@ -47,9 +47,9 @@ class ETLService(BaseService):
                 is_active=job_data.get("is_active", True)
             )
             
-            self.db_session.add(job)
-            self.db_session.commit()
-            self.db_session.refresh(job)
+            self.db.add(job)
+            self.db.commit()
+            self.db.refresh(job)
             
             # Invalidate jobs list cache using existing infrastructure
             cache = await cache_manager.get_cache()
@@ -63,14 +63,14 @@ class ETLService(BaseService):
                     self.logger.warning(f"Failed to invalidate cache: {str(cache_error)}")
             
             return {
-                "job_id": job.job_id,
+                "job_id": job.id,
                 "job_name": job.job_name,
                 "job_type": job.job_type,
                 "status": "created"
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_etl_job")
     
     async def execute_job(self, job_id: UUID, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -81,7 +81,7 @@ class ETLService(BaseService):
             
             self.log_operation("execute_job", {"job_id": job_id})
             
-            job = self.db_session.get(EtlJob, job_id)
+            job = self.db.get(EtlJob, job_id)
             if not job:
                 raise ETLError("Job not found")
             
@@ -89,7 +89,7 @@ class ETLService(BaseService):
                 raise ETLError("Job is not active")
             
             # Check dependencies
-            dependency_service = DependencyService(self.db_session)
+            dependency_service = DependencyService(self.db)
             dep_status = await dependency_service.check_dependencies_met(job_id)
             
             if not dep_status["dependencies_met"]:
@@ -116,9 +116,9 @@ class ETLService(BaseService):
                 execution_metadata=parameters or {}
             )
             
-            self.db_session.add(execution)
-            self.db_session.commit()
-            self.db_session.refresh(execution)
+            self.db.add(execution)
+            self.db.commit()
+            self.db.refresh(execution)
             
             # Publish job started event
             try:
@@ -185,7 +185,7 @@ class ETLService(BaseService):
                     self.logger.warning(f"Cache get error: {str(cache_error)}")
             
             # Fetch from DB
-            job = self.db_session.get(EtlJob, job_id)
+            job = self.db.get(EtlJob, job_id)
             if not job:
                 raise ETLError("Job not found")
             
@@ -196,12 +196,12 @@ class ETLService(BaseService):
                 .order_by(JobExecution.created_at.desc())
                 .limit(10)
             )
-            executions = self.db_session.execute(stmt).scalars().all()
+            executions = self.db.execute(stmt).scalars().all()
             
             latest_execution = executions[0] if executions else None
             
             result = {
-                "job_id": job.job_id,
+                "job_id": job.id,
                 "job_name": job.job_name,
                 "job_type": job.job_type,
                 "job_category": job.job_category,
@@ -284,45 +284,91 @@ class ETLService(BaseService):
             self.handle_error(e, "cancel_execution")
     
     async def get_jobs_list(self, job_type: str = None, is_active: bool = None) -> List[Dict[str, Any]]:
-        """Get list of ETL jobs dengan optional filtering."""
+        """Get list of ETL jobs dengan optional filtering - optimized to avoid N+1 queries."""
         try:
             self.log_operation("get_jobs_list", {"job_type": job_type, "is_active": is_active})
             
-            stmt = select(EtlJob)
+            from sqlalchemy import func
+            from sqlalchemy.orm import aliased
             
+            # Subquery to get latest execution per job using ROW_NUMBER window function
+            latest_execution_subq = (
+                select(
+                    JobExecution.job_id,
+                    JobExecution.id.label('execution_id'),
+                    JobExecution.status,
+                    JobExecution.start_time,
+                    JobExecution.records_processed,
+                    func.row_number().over(
+                        partition_by=JobExecution.job_id,
+                        order_by=JobExecution.created_at.desc()
+                    ).label('rn')
+                )
+                .subquery()
+            )
+            
+            # Alias for the subquery
+            latest_exec = aliased(latest_execution_subq)
+            
+            # Main query with LEFT JOIN to get jobs with their latest execution in ONE query
+            stmt = (
+                select(
+                    EtlJob,
+                    latest_exec.c.execution_id,
+                    latest_exec.c.status,
+                    latest_exec.c.start_time,
+                    latest_exec.c.records_processed
+                )
+                .outerjoin(
+                    latest_exec,
+                    and_(
+                        EtlJob.id == latest_exec.c.job_id,
+                        latest_exec.c.rn == 1  # Only get the first row (latest)
+                    )
+                )
+            )
+            
+            # Apply filters
             if job_type:
                 stmt = stmt.where(EtlJob.job_type == job_type)
             if is_active is not None:
                 stmt = stmt.where(EtlJob.is_active == is_active)
             
             stmt = stmt.order_by(EtlJob.created_at.desc())
-            jobs = self.db_session.execute(stmt).scalars().all()
             
+            # Execute query - this is now just ONE query instead of N+1!
+            rows = self.db.execute(stmt).all()
+            
+            # Return empty list if no jobs found
+            if not rows:
+                return []
+            
+            # Build result from the joined data
             result = []
-            for job in jobs:
-                # Get latest execution
-                latest_stmt = (
-                    select(JobExecution)
-                    .where(JobExecution.job_id == job.job_id)
-                    .order_by(JobExecution.created_at.desc())
-                    .limit(1)
-                )
-                latest_execution = self.db_session.execute(latest_stmt).scalar_one_or_none()
+            for row in rows:
+                job = row[0]  # EtlJob object
+                exec_id = row[1]
+                exec_status = row[2]
+                exec_start_time = row[3]
+                exec_records = row[4]
                 
                 result.append({
-                    "job_id": job.job_id,
+                    "job_id": job.id,
                     "job_name": job.job_name,
                     "job_type": job.job_type,
                     "job_category": job.job_category,
                     "source_type": job.source_type,
+                    "target_schema": job.target_schema,
+                    "target_table": job.target_table,
+                    "job_config": job.job_config,
                     "is_active": job.is_active,
                     "schedule_expression": job.schedule_expression,
                     "latest_execution": {
-                        "execution_id": latest_execution.execution_id,
-                        "status": latest_execution.status,
-                        "start_time": latest_execution.start_time,
-                        "records_processed": latest_execution.records_processed
-                    } if latest_execution else None,
+                        "execution_id": exec_id,
+                        "status": exec_status,
+                        "start_time": exec_start_time,
+                        "records_processed": exec_records
+                    } if exec_id else None,
                     "created_at": job.created_at
                 })
             
