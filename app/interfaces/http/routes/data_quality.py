@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 
-from app.interfaces.dependencies import get_current_user, get_db
+from app.interfaces.dependencies import get_current_user
+from app.infrastructure.db.connection import get_session_dependency
 from app.schemas.data_quality_schema import (
     QualityRuleCreate, QualityRuleRead, QualityRuleUpdate,
     QualityCheckRequest, QualityCheckResponse,
@@ -22,7 +23,7 @@ router = APIRouter()
 async def create_quality_rule(
     rule_data: QualityRuleCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Create a new data quality rule"""
     try:
@@ -42,7 +43,7 @@ async def list_quality_rules(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[QualityRuleRead]:
     """List data quality rules with filtering"""
     try:
@@ -64,7 +65,7 @@ async def list_quality_rules(
 async def get_quality_rule(
     rule_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityRuleRead:
     """Get quality rule by ID"""
     try:
@@ -91,7 +92,7 @@ async def update_quality_rule(
     rule_id: int,
     rule_data: QualityRuleUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Update quality rule"""
     try:
@@ -110,7 +111,7 @@ async def update_quality_rule(
 async def delete_quality_rule(
     rule_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Delete quality rule"""
     try:
@@ -140,7 +141,7 @@ async def delete_quality_rule(
 async def run_quality_check(
     check_request: QualityCheckRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityCheckResponse:
     """Run quality check on data"""
     try:
@@ -161,7 +162,7 @@ async def run_quality_check(
 async def validate_data(
     validation_request: ValidationRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> ValidationResponse:
     """Validate data against quality rules"""
     try:
@@ -183,7 +184,7 @@ async def check_entity_quality(
     entity_ids: Optional[List[int]] = None,
     quality_config: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityCheckResponse:
     """Run quality check on specific entity type"""
     try:
@@ -204,7 +205,7 @@ async def check_file_quality(
     file_id: int,
     validation_rules: Optional[List[Dict[str, Any]]] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityCheckResponse:
     """Run quality check on processed file data"""
     try:
@@ -225,7 +226,7 @@ async def check_job_quality(
     execution_id: Optional[int] = None,
     quality_config: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityCheckResponse:
     """Run quality check on ETL job results"""
     try:
@@ -249,7 +250,7 @@ async def check_job_quality(
 async def generate_quality_report(
     report_request: QualityReportRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> QualityReportResponse:
     """Generate comprehensive quality report"""
     try:
@@ -271,7 +272,7 @@ async def get_quality_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Get quality summary statistics"""
     try:
@@ -293,7 +294,7 @@ async def get_quality_trends(
     period: str = Query("week", description="Period: day, week, month"),
     limit: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Get quality trends over time"""
     try:
@@ -321,7 +322,7 @@ async def get_quality_alerts(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> List[Dict[str, Any]]:
     """Get data quality alerts"""
     try:
@@ -344,7 +345,7 @@ async def resolve_quality_alert(
     alert_id: int,
     resolution_notes: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Resolve quality alert"""
     try:
@@ -398,7 +399,7 @@ async def get_quality_rule_types(
 async def get_quality_metrics(
     entity_type: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, Any]:
     """Get quality metrics dashboard data"""
     try:
@@ -415,7 +416,7 @@ async def schedule_quality_check(
     entity_type: str,
     schedule_config: Dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
     """Schedule recurring quality checks"""
     try:

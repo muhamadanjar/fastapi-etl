@@ -24,8 +24,8 @@ from app.utils.date_utils import get_current_timestamp
 class DataQualityService(BaseService):
     """Service for managing data quality operations."""
     
-    def __init__(self, db_session: Session):
-        super().__init__(db_session)
+    def __init__(self, db: Session):
+        super().__init__(db)
     
     def get_service_name(self) -> str:
         return "DataQualityService"
@@ -54,9 +54,9 @@ class DataQualityService(BaseService):
                 description=rule_data.get("description")
             )
             
-            self.db_session.add(quality_rule)
-            self.db_session.commit()
-            self.db_session.refresh(quality_rule)
+            self.db.add(quality_rule)
+            self.db.commit()
+            self.db.refresh(quality_rule)
             
             return {
                 "rule_id": quality_rule.rule_id,
@@ -67,7 +67,7 @@ class DataQualityService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_quality_rule")
     
     async def get_quality_rules(
@@ -96,7 +96,7 @@ class DataQualityService(BaseService):
                 stmt = stmt.where(QualityRule.is_active == is_active)
             
             stmt = stmt.order_by(QualityRule.created_at.desc()).offset(skip).limit(limit)
-            rules = self.db_session.execute(stmt).scalars().all()
+            rules = self.db.execute(stmt).scalars().all()
             
             result = []
             for rule in rules:
@@ -129,7 +129,7 @@ class DataQualityService(BaseService):
         try:
             self.log_operation("get_quality_rule_by_id", {"rule_id": rule_id})
             
-            rule = self.db_session.get(QualityRule, rule_id)
+            rule = self.db.get(QualityRule, rule_id)
             if not rule:
                 return None
             
@@ -159,7 +159,7 @@ class DataQualityService(BaseService):
         try:
             self.log_operation("update_quality_rule", {"rule_id": rule_id})
             
-            rule = self.db_session.get(QualityRule, rule_id)
+            rule = self.db.get(QualityRule, rule_id)
             if not rule:
                 raise DataQualityError("Quality rule not found")
             
@@ -175,7 +175,7 @@ class DataQualityService(BaseService):
                 if hasattr(rule, key):
                     setattr(rule, key, value)
             
-            self.db_session.commit()
+            self.db.commit()
             
             return {
                 "rule_id": rule.rule_id,
@@ -186,7 +186,7 @@ class DataQualityService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "update_quality_rule")
     
     async def delete_quality_rule(self, rule_id: int) -> bool:
@@ -194,17 +194,17 @@ class DataQualityService(BaseService):
         try:
             self.log_operation("delete_quality_rule", {"rule_id": rule_id})
             
-            rule = self.db_session.get(QualityRule, rule_id)
+            rule = self.db.get(QualityRule, rule_id)
             if not rule:
                 raise DataQualityError("Quality rule not found")
             
-            self.db_session.delete(rule)
-            self.db_session.commit()
+            self.db.delete(rule)
+            self.db.commit()
             
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "delete_quality_rule")
     
     async def run_quality_check(
@@ -285,8 +285,8 @@ class DataQualityService(BaseService):
             
             # Save check results to database
             for check_result in check_results:
-                self.db_session.add(check_result)
-            self.db_session.commit()
+                self.db.add(check_result)
+            self.db.commit()
             
             # Calculate overall quality score
             total_checks = sum(r["records_checked"] for r in rule_results.values())
@@ -372,7 +372,7 @@ class DataQualityService(BaseService):
             if entity_ids:
                 stmt = stmt.where(Entity.entity_id.in_(entity_ids))
             
-            entities = self.db_session.execute(stmt).scalars().all()
+            entities = self.db.execute(stmt).scalars().all()
             
             if not entities:
                 return {
@@ -414,13 +414,13 @@ class DataQualityService(BaseService):
             self.log_operation("check_file_quality", {"file_id": file_id})
             
             # Get file record
-            file_record = self.db_session.get(FileRegistry, file_id)
+            file_record = self.db.get(FileRegistry, file_id)
             if not file_record:
                 raise DataQualityError("File not found")
             
             # Get raw records for the file
             stmt = select(RawRecord).where(RawRecord.file_id == file_id)
-            raw_records = self.db_session.execute(stmt).scalars().all()
+            raw_records = self.db.execute(stmt).scalars().all()
             
             if not raw_records:
                 return {
@@ -465,7 +465,7 @@ class DataQualityService(BaseService):
             else:
                 stmt = stmt.order_by(JobExecution.created_at.desc()).limit(1)
             
-            job_execution = self.db_session.execute(stmt).scalar_one_or_none()
+            job_execution = self.db.execute(stmt).scalar_one_or_none()
             if not job_execution:
                 raise DataQualityError("Job execution not found")
             
@@ -514,7 +514,7 @@ class DataQualityService(BaseService):
                 # Join with quality rules to filter by entity type
                 stmt = stmt.join(QualityRule).where(QualityRule.entity_type == entity_type)
             
-            check_results = self.db_session.execute(stmt).scalars().all()
+            check_results = self.db.execute(stmt).scalars().all()
             
             # Calculate statistics
             total_checks = len(check_results)
@@ -526,7 +526,7 @@ class DataQualityService(BaseService):
             # Group by rule type
             rule_type_stats = {}
             for result in check_results:
-                rule = self.db_session.get(QualityRule, result.rule_id)
+                rule = self.db.get(QualityRule, result.rule_id)
                 if rule:
                     rule_type = rule.rule_type
                     if rule_type not in rule_type_stats:
@@ -587,7 +587,7 @@ class DataQualityService(BaseService):
             if entity_type:
                 stmt = stmt.join(QualityRule).where(QualityRule.entity_type == entity_type)
             
-            results = self.db_session.execute(stmt).scalars().all()
+            results = self.db.execute(stmt).scalars().all()
             
             # Calculate summary
             total_checks = len(results)
@@ -666,10 +666,10 @@ class DataQualityService(BaseService):
             if entity_type:
                 stmt = stmt.join(QualityRule).where(QualityRule.entity_type == entity_type)
             
-            failed_checks = self.db_session.execute(stmt.offset(skip).limit(limit)).scalars().all()
+            failed_checks = self.db.execute(stmt.offset(skip).limit(limit)).scalars().all()
             
             for check in failed_checks:
-                rule = self.db_session.get(QualityRule, check.rule_id)
+                rule = self.db.get(QualityRule, check.rule_id)
                 if rule and (not severity or rule.severity == severity.upper()):
                     alerts.append({
                         "alert_id": check.check_id,
@@ -717,7 +717,7 @@ class DataQualityService(BaseService):
             if entity_type:
                 stmt = stmt.join(QualityRule).where(QualityRule.entity_type == entity_type)
             
-            recent_checks = self.db_session.execute(stmt).scalars().all()
+            recent_checks = self.db.execute(stmt).scalars().all()
             
             # Calculate metrics
             total_checks = len(recent_checks)
@@ -772,7 +772,7 @@ class DataQualityService(BaseService):
     def _get_rules_by_ids(self, rule_ids: List[int]) -> List[QualityRule]:
         """Get quality rules by IDs."""
         stmt = select(QualityRule).where(QualityRule.rule_id.in_(rule_ids))
-        return self.db_session.execute(stmt).scalars().all()
+        return self.db.execute(stmt).scalars().all()
     
     def _get_rules_by_entity_type(self, entity_type: str) -> List[QualityRule]:
         """Get quality rules by entity type."""
@@ -782,7 +782,7 @@ class DataQualityService(BaseService):
                 QualityRule.is_active == True
             )
         )
-        return self.db_session.execute(stmt).scalars().all()
+        return self.db.execute(stmt).scalars().all()
     
     def _check_rule_against_record(self, rule: QualityRule, record: Dict[str, Any], record_index: int) -> Optional[Dict[str, Any]]:
         """Check a single quality rule against a record."""
@@ -1011,7 +1011,7 @@ class DataQualityService(BaseService):
                     QualityCheckResult.created_at >= datetime.now() - timedelta(days=30)
                 )
             )
-            results = self.db_session.execute(stmt).scalars().all()
+            results = self.db.execute(stmt).scalars().all()
             
             total_checks = len(results)
             passed_checks = sum(1 for r in results if r.check_result == "PASS")
