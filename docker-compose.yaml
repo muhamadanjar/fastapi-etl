@@ -22,7 +22,7 @@ services:
       - redis
       - rabbitmq
       - api
-    command: celery -A app.infrastructure.celery.celery_app worker --loglevel=info
+    command: celery -A app.worker worker --loglevel=info
 
   celery_flower:
     build:
@@ -37,7 +37,7 @@ services:
       - celery_worker
       - rabbitmq
       - redis
-    command: celery -A app.infrastructure.celery.celery_app flower --port=5555
+    command: celery -A app.worker flower --port=5555
 
 
   redis:

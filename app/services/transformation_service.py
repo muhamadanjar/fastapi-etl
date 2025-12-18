@@ -47,9 +47,9 @@ class TransformationService(BaseService):
                 is_active=rule_data.get("is_active", True)
             )
             
-            self.db_session.add(rule)
-            self.db_session.commit()
-            self.db_session.refresh(rule)
+            self.db.add(rule)
+            self.db.commit()
+            self.db.refresh(rule)
             
             return {
                 "rule_id": rule.rule_id,
@@ -59,7 +59,7 @@ class TransformationService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_transformation_rule")
     
     async def create_field_mapping(self, mapping_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -84,9 +84,9 @@ class TransformationService(BaseService):
                 default_value=mapping_data.get("default_value")
             )
             
-            self.db_session.add(mapping)
-            self.db_session.commit()
-            self.db_session.refresh(mapping)
+            self.db.add(mapping)
+            self.db.commit()
+            self.db.refresh(mapping)
             
             return {
                 "mapping_id": mapping.mapping_id,
@@ -97,7 +97,7 @@ class TransformationService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_field_mapping")
     
     async def transform_data_batch(self, data_batch: List[Dict[str, Any]], source_entity: str, target_entity: str) -> Dict[str, Any]:
