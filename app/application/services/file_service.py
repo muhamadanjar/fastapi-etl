@@ -18,7 +18,7 @@ from uuid import UUID
 
 from app.infrastructure.db.repositories.file_repository import FileRegistryRepository
 from app.schemas.base import PaginatedMetaDataResponse
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure

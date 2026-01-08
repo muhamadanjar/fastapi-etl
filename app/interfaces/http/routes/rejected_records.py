@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from app.infrastructure.db.connection import get_session_dependency
-from app.services.rejected_records_service import RejectedRecordsService
+from app.application.services.rejected_records_service import RejectedRecordsService
 from app.infrastructure.db.models.raw_data.rejected_records import (
     RejectedRecord,
     RejectedRecordRead,

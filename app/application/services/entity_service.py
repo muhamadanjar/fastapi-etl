@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_, func
 
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.processed.entities import Entity
 from app.infrastructure.db.models.processed.entity_relationships import EntityRelationship
 from app.core.exceptions import EntityError

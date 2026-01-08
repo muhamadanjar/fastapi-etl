@@ -10,7 +10,7 @@ from email import encoders
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.core.exceptions import NotificationError, ServiceError
 from app.core.enums import NotificationType, NotificationChannel, NotificationStatus
 from app.utils.date_utils import get_current_timestamp

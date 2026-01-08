@@ -14,7 +14,7 @@ from app.core.exceptions import FileProcessingException
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
-from app.services.rejected_records_service import RejectedRecordsService
+from app.application.services.rejected_records_service import RejectedRecordsService
 
 logger = get_logger(__name__)
 

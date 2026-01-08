@@ -9,7 +9,7 @@ from sqlalchemy import select
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.auth import User
 from app.schemas.auth import UserCreate, Token, PasswordChange
 from app.core.exceptions import ServiceError, UnauthorizedError

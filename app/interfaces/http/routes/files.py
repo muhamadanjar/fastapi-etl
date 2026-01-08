@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 
 from app.interfaces.dependencies import get_current_user
 from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
-from app.services.file_service import FileService
+from app.application.services.file_service import FileService
 from app.infrastructure.db.models.auth import User
 from app.infrastructure.db.connection import get_session_dependency
 

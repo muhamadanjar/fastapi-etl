@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.transformation.transformation_rules import TransformationRule
 from app.infrastructure.db.models.transformation.field_mappings import FieldMapping
 from app.infrastructure.db.models.staging.lookup_tables import LookupTable

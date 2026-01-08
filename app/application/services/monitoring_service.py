@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, func, desc
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.core.exceptions import MonitoringError, ServiceError
 from app.core.enums import JobStatus
 from app.utils.date_utils import get_current_timestamp

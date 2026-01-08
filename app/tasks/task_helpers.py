@@ -8,8 +8,8 @@ from typing import Optional, Dict, Any
 from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.services.error_service import ErrorService
-from app.services.dependency_service import DependencyService
+from app.application.services.error_service import ErrorService
+from app.application.services.dependency_service import DependencyService
 from app.infrastructure.db.models.etl_control.error_logs import ErrorType, ErrorSeverity
 from app.utils.logger import get_logger
 

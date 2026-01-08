@@ -10,7 +10,7 @@ from app.schemas.data_quality_schema import (
     ValidationRequest, ValidationResponse,
     QualityReportRequest, QualityReportResponse
 )
-from app.services.data_quality_service import DataQualityService
+from app.application.services.data_quality_service import DataQualityService
 from app.infrastructure.db.models.auth import User
 
 router = APIRouter()

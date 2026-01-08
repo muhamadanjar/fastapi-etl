@@ -23,9 +23,9 @@ from app.infrastructure.db.models.audit.data_lineage import DataLineage
 from app.infrastructure.db.connection import get_session
 from app.processors import get_processor
 from app.transformers import create_transformation_pipeline
-from app.services.etl_service import ETLService
-from app.services.file_service import FileService
-from app.services.data_quality_service import DataQualityService
+from app.application.services.etl_service import ETLService
+from app.application.services.file_service import FileService
+from app.application.services.data_quality_service import DataQualityService
 from app.utils.logger import get_logger
 from app.core.exceptions import ETLException, FileProcessingException
 from app.utils.event_publisher import get_event_publisher

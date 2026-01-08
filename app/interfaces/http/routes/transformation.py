@@ -10,7 +10,7 @@ from app.schemas.transformation import (
     DataTransformRequest, DataTransformResponse,
     CustomTransformRequest, TestTransformRequest, TestTransformResponse
 )
-from app.services.transformation_service import TransformationService
+from app.application.services.transformation_service import TransformationService
 from app.infrastructure.db.models.auth import User
 
 router = APIRouter()

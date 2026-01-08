@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional, Set
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, or_
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.etl_control.job_dependencies import (
     JobDependency, 
     DependencyType,

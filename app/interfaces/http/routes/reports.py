@@ -7,7 +7,7 @@ from datetime import datetime
 
 from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.response_schemas import ReportResponse, ReportRequest
-from app.services.report_service import ReportService
+from app.application.services.report_service import ReportService
 from app.infrastructure.db.models import User
 
 router = APIRouter()

@@ -9,7 +9,7 @@ from app.schemas.entity_schemas import (
     EntityCreate, EntityUpdate, EntityResponse, EntityRelationshipResponse,
     EntitySearchRequest, EntityMergeRequest
 )
-from app.services.entity_service import EntityService
+from app.application.services.entity_service import EntityService
 from app.infrastructure.db.models import User
 
 router = APIRouter()

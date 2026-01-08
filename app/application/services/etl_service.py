@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 from uuid import UUID
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.core.exceptions import ETLError
@@ -18,6 +18,7 @@ from app.core.enums import JobStatus, JobType
 from app.utils.date_utils import get_current_timestamp
 from app.utils.event_publisher import get_event_publisher
 from app.infrastructure.cache import cache_manager
+from app.infrastructure.db.repositories.job_repository import JobRepository
 
 
 class ETLService(BaseService):
@@ -25,6 +26,7 @@ class ETLService(BaseService):
     
     def __init__(self, db_session: Session):
         super().__init__(db_session)
+        self.job_repo = JobRepository(db_session)
     
     def get_service_name(self) -> str:
         return "ETLService"
@@ -35,21 +37,7 @@ class ETLService(BaseService):
             self.validate_input(job_data, ["job_name", "job_type", "source_type"])
             self.log_operation("create_etl_job", {"job_name": job_data["job_name"]})
             
-            job = EtlJob(
-                job_name=job_data["job_name"],
-                job_type=job_data["job_type"],
-                job_category=job_data.get("job_category", "GENERAL"),
-                source_type=job_data["source_type"],
-                target_schema=job_data.get("target_schema"),
-                target_table=job_data.get("target_table"),
-                job_config=job_data.get("job_config", {}),
-                schedule_expression=job_data.get("schedule_expression"),
-                is_active=job_data.get("is_active", True)
-            )
-            
-            self.db.add(job)
-            self.db.commit()
-            self.db.refresh(job)
+            job = self.job_repo.create(job_data)
             
             # Invalidate jobs list cache using existing infrastructure
             cache = await cache_manager.get_cache()
@@ -77,11 +65,11 @@ class ETLService(BaseService):
         """Execute an ETL job."""
         try:
             from app.tasks.etl_tasks import execute_etl_job
-            from app.services.dependency_service import DependencyService
+            from app.application.services.dependency_service import DependencyService
             
             self.log_operation("execute_job", {"job_id": job_id})
             
-            job = self.db.get(EtlJob, job_id)
+            job = self.job_repo.get(job_id)
             if not job:
                 raise ETLError("Job not found")
             
@@ -185,7 +173,7 @@ class ETLService(BaseService):
                     self.logger.warning(f"Cache get error: {str(cache_error)}")
             
             # Fetch from DB
-            job = self.db.get(EtlJob, job_id)
+            job = self.job_repo.get(job_id)
             if not job:
                 raise ETLError("Job not found")
             
@@ -382,16 +370,11 @@ class ETLService(BaseService):
         try:
             self.log_operation("update_job", {"job_id": job_id})
             
-            job = self.db_session.get(EtlJob, job_id)
+            job = self.job_repo.get(job_id)
             if not job:
                 raise ETLError("Job not found")
             
-            # Update fields
-            for key, value in job_data.items():
-                if hasattr(job, key):
-                    setattr(job, key, value)
-            
-            self.db_session.commit()
+            job = self.job_repo.update(job_id, job_data)
             
             return {
                 "job_id": job.job_id,
@@ -427,8 +410,7 @@ class ETLService(BaseService):
             if running_executions:
                 raise ETLError("Cannot delete job with running executions")
             
-            self.db_session.delete(job)
-            self.db_session.commit()
+            self.job_repo.delete(job_id)
             return True
             
         except Exception as e:

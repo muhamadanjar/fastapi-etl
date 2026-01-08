@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.db import get_session_dependency
 from app.interfaces.dependencies import get_current_user
-from app.services.error_service import ErrorService
+from app.application.services.error_service import ErrorService
 from app.infrastructure.db.models.etl_control.error_logs import (
     ErrorType,
     ErrorSeverity

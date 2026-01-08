@@ -9,7 +9,7 @@ from uuid import UUID
 from datetime import datetime
 import redis.asyncio as redis
 
-from app.models.events import Event, EventType, EventPriority
+from app.domain.events import Event, EventType, EventPriority
 from app.core.config import get_settings
 from app.utils.logger import get_logger
 

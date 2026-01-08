@@ -13,7 +13,6 @@ from app.core.exceptions import AppException
 from app.infrastructure.db.connection import database_manager
 from app.infrastructure.cache import redis_manager
 from app.infrastructure.cache import cache_manager
-from app.infrastructure.db.service import user_service
 from app.infrastructure.messaging import messaging_manager, Message
 from app.infrastructure.messaging.decorators import message_handler, publish_event
 from app.infrastructure.messaging.manager import MessagingType

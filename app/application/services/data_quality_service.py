@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, func, or_
 
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.etl_control.quality_rules import QualityRule
 from app.infrastructure.db.models.etl_control.quality_check_results import QualityCheckResult
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution

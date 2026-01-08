@@ -6,9 +6,9 @@ import asyncio
 from typing import Dict, Any, Callable
 from datetime import datetime
 
-from app.models.events import Event, EventType
+from app.domain.events import Event, EventType
 from app.utils.logger import get_logger
-from app.services.notification_service import NotificationService
+from app.application.services.notification_service import NotificationService
 from app.infrastructure.db.connection import get_session
 
 logger = get_logger(__name__)

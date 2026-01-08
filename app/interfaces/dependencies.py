@@ -8,7 +8,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.core.config import settings
 from app.infrastructure.db.connection import database_manager, get_session_dependency
-from app.services.auth_service import AuthService
+from app.application.services.auth_service import AuthService
 from app.infrastructure.db.models.auth import User
 
 # Security

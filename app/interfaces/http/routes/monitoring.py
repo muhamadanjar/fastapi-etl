@@ -10,7 +10,7 @@ from app.infrastructure.db.connection import (
     get_session_dependency,
     get_async_session_dependency
 )
-from app.services.monitoring_service import MonitoringService
+from app.application.services.monitoring_service import MonitoringService
 from app.infrastructure.db.models import User
 
 router = APIRouter()

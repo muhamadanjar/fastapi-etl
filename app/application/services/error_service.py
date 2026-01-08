@@ -9,7 +9,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, func
-from app.services.base import BaseService
+from app.application.services.base import BaseService
 from app.infrastructure.db.models.etl_control.error_logs import (
     ErrorLog,
     ErrorType,
