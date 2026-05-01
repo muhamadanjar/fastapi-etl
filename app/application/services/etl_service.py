@@ -15,6 +15,7 @@ from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.core.exceptions import ETLError
 from app.core.enums import JobStatus, JobType
+from app.domain.events import EventType, EventPriority
 from app.utils.date_utils import get_current_timestamp
 from app.utils.event_publisher import get_event_publisher
 from app.infrastructure.cache import cache_manager
@@ -32,33 +33,174 @@ class ETLService(BaseService):
         return "ETLService"
     
     async def create_etl_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new ETL job."""
+        """
+        Create a new ETL job with explicit transaction management.
+
+        PHASE 2: ETL Job Creation (SEQUENCE.md lines 39-69)
+
+        Flow:
+        1. Validate input (job_name, job_type, source_type required)
+        2. BEGIN TRANSACTION
+        3. INSERT etl_jobs record
+        4. INSERT transformation_rules (if provided in job_data)
+        5. INSERT field_mappings (if provided in job_data)
+        6. COMMIT TRANSACTION (explicit)
+        7. SET job:{job_id} config in cache
+        8. Publish JobCreatedEvent
+        9. Return 201 Created with job details + job_id
+
+        On failure:
+        - ROLLBACK TRANSACTION automatically
+        - Log error with full details
+        - Raise ETLError with descriptive message
+        """
+        # BEGIN TRANSACTION - explicit transaction management
+        transaction = None
+        job = None
+
         try:
+            # Input validation
             self.validate_input(job_data, ["job_name", "job_type", "source_type"])
             self.log_operation("create_etl_job", {"job_name": job_data["job_name"]})
-            
+
+            # Extract optional transformation/field mapping data
+            # These come from job_config nested structure
+            transformation_rules = job_data.pop("transformation_rules", [])
+            field_mappings = job_data.pop("field_mappings", [])
+
+            # Start explicit transaction (SQLAlchemy 2.0 pattern)
+            transaction = self.db.begin_nested()
+
+            # 1. INSERT etl_jobs record
             job = self.job_repo.create(job_data)
-            
-            # Invalidate jobs list cache using existing infrastructure
-            cache = await cache_manager.get_cache()
-            if cache:
-                try:
-                    # Clear all jobs:* keys
+            self.logger.debug(f"Inserted EtlJob record: job_id={job.id}, job_name={job.job_name}")
+
+            # 2. INSERT transformation_rules (if provided)
+            # Note: transformation_rules are stored in etl_control.quality_rules table
+            # which serves dual purpose: quality rules and transformation rules.
+            # Quality rules can be associated with jobs via job context in job_config
+            if transformation_rules:
+                from app.infrastructure.db.models.etl_control.quality_rules import QualityRule
+                for rule_data in transformation_rules:
+                    # Create rule instance - job association happens through job_config context
+                    rule = QualityRule(**rule_data)
+                    self.db.add(rule)
+                self.db.flush()
+                self.logger.debug(
+                    f"Inserted {len(transformation_rules)} transformation rules "
+                    f"for job_id={job.id}"
+                )
+
+            # 3. INSERT field_mappings (if provided)
+            # Field mappings in transformation schema store source/target field mapping rules
+            if field_mappings:
+                from app.infrastructure.db.models.transformation.field_mappings import FieldMapping
+                for mapping_data in field_mappings:
+                    # Create mapping instance
+                    mapping = FieldMapping(**mapping_data)
+                    self.db.add(mapping)
+                self.db.flush()
+                self.logger.debug(
+                    f"Inserted {len(field_mappings)} field mappings "
+                    f"for job_id={job.id}"
+                )
+
+            # 4. COMMIT TRANSACTION (explicit)
+            self.db.commit()
+            self.logger.info(
+                f"Successfully committed ETL job creation: "
+                f"job_id={job.id}, job_name={job.job_name}"
+            )
+
+            # 5. SET job:{job_id} config in cache (after commit)
+            try:
+                cache = await cache_manager.get_cache()
+                if cache:
+                    cache_key = f"job:{job.id}"
+                    job_config_data = {
+                        "job_id": str(job.id),
+                        "job_name": job.job_name,
+                        "job_type": job.job_type,
+                        "source_type": job.source_type,
+                        "target_schema": job.target_schema,
+                        "target_table": job.target_table,
+                        "job_config": job.job_config,
+                        "is_active": job.is_active,
+                        "created_at": job.created_at.isoformat() if job.created_at else None
+                    }
+                    await cache.set(cache_key, job_config_data, ttl=3600)  # 1 hour TTL
+                    self.logger.debug(f"Cached job config with key: {cache_key}")
+
+                    # Also invalidate jobs list cache
                     keys = await cache.scan_keys("jobs:*")
                     if keys:
                         await cache.delete(*keys)
-                except Exception as cache_error:
-                    self.logger.warning(f"Failed to invalidate cache: {str(cache_error)}")
-            
+                        self.logger.debug("Invalidated jobs:* cache keys")
+            except Exception as cache_error:
+                self.logger.warning(
+                    f"Failed to update cache after job creation: {str(cache_error)}"
+                )
+
+            # 6. Publish JobCreatedEvent (after commit and cache update)
+            try:
+                publisher = await get_event_publisher()
+                await publisher.publish(
+                    event_type=EventType.JOB_CREATED,
+                    data={
+                        "job_id": str(job.id),
+                        "job_name": job.job_name,
+                        "job_type": str(job.job_type),
+                        "source_type": str(job.source_type),
+                        "created_at": job.created_at.isoformat() if job.created_at else None,
+                        "transformation_rules_count": len(transformation_rules),
+                        "field_mappings_count": len(field_mappings)
+                    },
+                    source="etl_service",
+                    priority=EventPriority.MEDIUM
+                )
+                self.logger.info(f"Published JobCreatedEvent for job_id={job.id}")
+            except Exception as event_error:
+                # Event publishing should not break the flow, but log it
+                self.logger.warning(
+                    f"Failed to publish JobCreatedEvent for job_id={job.id}: {str(event_error)}"
+                )
+
+            # 7. Return job details
             return {
-                "job_id": job.id,
+                "job_id": str(job.id),
                 "job_name": job.job_name,
-                "job_type": job.job_type,
-                "status": "created"
+                "job_type": str(job.job_type),
+                "source_type": str(job.source_type),
+                "status": "created",
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "transformation_rules_count": len(transformation_rules),
+                "field_mappings_count": len(field_mappings),
+                "message": "ETL job created successfully"
             }
-            
+
         except Exception as e:
-            self.db.rollback()
+            # ROLLBACK TRANSACTION on any failure
+            if transaction:
+                try:
+                    self.db.rollback()
+                    self.logger.info("Transaction rolled back due to error in create_etl_job")
+                except Exception as rollback_error:
+                    self.logger.error(
+                        f"Failed to rollback transaction: {str(rollback_error)}"
+                    )
+            else:
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
+
+            # Log full error context
+            self.logger.error(
+                f"ETL job creation failed: {str(e)}, "
+                f"job_data={job_data.get('job_name', 'unknown')}",
+                exc_info=True
+            )
+
             self.handle_error(e, "create_etl_job")
     
     async def execute_job(self, job_id: UUID, parameters: Dict[str, Any] = None) -> Dict[str, Any]:

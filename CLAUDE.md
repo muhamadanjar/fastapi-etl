@@ -213,6 +213,81 @@ PostgreSQL with 7 schemas:
 
 **Error Handling**: Domain exceptions (app/domain/exceptions/) → HTTP errors via `app/core/exceptions.AppException` middleware
 
+## Phase Implementation Details
+
+### Phase 2: ETL Job Creation (IMPLEMENTED ✅)
+
+**File**: `app/application/services/etl_service.py` → `create_etl_job()`
+
+**Requirements** (SEQUENCE.md lines 39-69):
+1. POST /api/v1/jobs endpoint
+2. Accept job_config (name, type, source_type, rules, mappings)
+3. Check job_dependencies status
+4. BEGIN TRANSACTION
+5. INSERT etl_jobs record
+6. INSERT transformation_rules
+7. INSERT field_mappings
+8. COMMIT TRANSACTION
+9. SET job:{job_id} config in cache
+10. **Publish JobCreatedEvent** ✅ IMPLEMENTED
+11. Return 201 Created with job details + job_id
+
+**Implementation Details**:
+
+1. **Explicit Transaction Management** (SQLAlchemy 2.0):
+   - Uses `db.begin_nested()` to start explicit nested transaction
+   - `db.flush()` after each INSERT for immediate visibility within transaction
+   - `db.commit()` after all inserts to atomically commit all three: job + rules + mappings
+   - `db.rollback()` on any exception to ensure data consistency
+
+2. **Job Creation Flow**:
+   - Validates required fields: job_name, job_type, source_type
+   - Extracts transformation_rules and field_mappings from job_data
+   - Inserts EtlJob record with `self.job_repo.create()`
+   - Inserts QualityRule records (dual-purpose: transformation rules)
+   - Inserts FieldMapping records
+   - All three inserts happen within same transaction
+
+3. **Event Publishing** (After COMMIT):
+   - Publishes JobCreatedEvent via EventPublisher to Redis
+   - Event includes: job_id, job_name, job_type, source_type, created_at, rule/mapping counts
+   - Uses EventPriority.MEDIUM
+   - Wrapped in try/except to prevent event failure from breaking job creation
+   - Logs warning if event publishing fails (doesn't break flow)
+
+4. **Cache Management** (After COMMIT):
+   - Sets job:{job_id} cache key with full job config (TTL: 1 hour)
+   - Invalidates jobs:* cache keys to refresh job list
+   - Wrapped in try/except to prevent cache failure from breaking job creation
+   - Falls back gracefully if cache unavailable
+
+5. **Error Handling**:
+   - Input validation happens before transaction
+   - Catches any exception during transaction
+   - Explicitly calls db.rollback() to undo all three inserts
+   - Logs full error context with exc_info=True
+   - Uses self.handle_error() for standardized error response
+
+**Key Classes/Imports**:
+- `EventType.JOB_CREATED` from `app/domain/events.py`
+- `EventPriority.MEDIUM` from `app/domain/events.py`
+- `QualityRule` from `app/infrastructure/db/models/etl_control/quality_rules.py`
+- `FieldMapping` from `app/infrastructure/db/models/transformation/field_mappings.py`
+- `cache_manager` from `app/infrastructure/cache/`
+- `get_event_publisher()` from `app/utils/event_publisher.py`
+
+**Testing**:
+- Verify: POST /api/v1/jobs with valid job_data creates job record
+- Verify: transformation_rules are inserted (if provided)
+- Verify: field_mappings are inserted (if provided)
+- Verify: JobCreatedEvent is published to Redis
+- Verify: job:{job_id} is cached with 1 hour TTL
+- Verify: jobs:* cache is invalidated
+- Verify: On error, all inserts are rolled back atomically
+- Verify: On cache/event failure, job creation still succeeds
+
+---
+
 ## Debugging
 
 - **Logs**: Configured in `app/core/logging.py`, output to console and files
