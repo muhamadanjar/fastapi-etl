@@ -364,6 +364,231 @@ class EntityService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_entity_types")
     
+    async def merge_entity_data(
+        self,
+        entity_id: int,
+        new_data: Dict[str, Any],
+        conflict_strategy: str = "newer_wins",
+        confidence_score: float = 1.0
+    ) -> Dict[str, Any]:
+        """
+        Merge new data into existing entity with conflict resolution.
+
+        Strategies:
+        - newer_wins: New values always replace existing
+        - score_based: Use value with higher confidence score
+        - conservative: Keep existing values
+        - merge: Intelligently merge objects/arrays
+
+        Args:
+            entity_id: ID of entity to merge into
+            new_data: New data to merge
+            conflict_strategy: Strategy for conflict resolution
+            confidence_score: Confidence of new data (0.0-1.0)
+
+        Returns:
+            Updated entity data
+        """
+        try:
+            self.log_operation("merge_entity_data", {
+                "entity_id": entity_id,
+                "strategy": conflict_strategy,
+                "confidence": confidence_score
+            })
+
+            entity = self.db_session.get(Entity, entity_id)
+            if not entity:
+                raise EntityError(f"Entity {entity_id} not found")
+
+            existing_data = entity.entity_data or {}
+            merged_data = self._apply_merge_strategy(
+                existing_data, new_data, conflict_strategy, confidence_score
+            )
+
+            return merged_data
+
+        except Exception as e:
+            self.handle_error(e, "merge_entity_data")
+
+    def _apply_merge_strategy(
+        self,
+        existing_data: Dict[str, Any],
+        new_data: Dict[str, Any],
+        strategy: str,
+        confidence: float
+    ) -> Dict[str, Any]:
+        """Apply conflict resolution strategy to merge data."""
+        merged = existing_data.copy()
+
+        if strategy == "newer_wins":
+            # New values always win
+            merged.update(new_data)
+
+        elif strategy == "score_based":
+            # Higher confidence wins - use new data if confidence >= 0.9
+            if confidence >= 0.9:
+                merged.update(new_data)
+            else:
+                # Selective merge for moderate confidence
+                for key, new_value in new_data.items():
+                    if key not in merged:
+                        merged[key] = new_value
+                    elif isinstance(new_value, (int, float)) and isinstance(merged.get(key), (int, float)):
+                        merged[key] = max(merged[key], new_value)
+                    elif isinstance(new_value, list):
+                        merged[key] = list(set(merged.get(key, []) + (new_value or [])))
+
+        elif strategy == "conservative":
+            # Keep existing values, only add new fields
+            for key, new_value in new_data.items():
+                if key not in merged:
+                    merged[key] = new_value
+
+        elif strategy == "merge":
+            # Intelligent merge: dicts recursively, lists uniquely
+            for key, new_value in new_data.items():
+                if key not in merged:
+                    merged[key] = new_value
+                elif isinstance(new_value, dict) and isinstance(merged[key], dict):
+                    merged[key] = {**merged[key], **new_value}
+                elif isinstance(new_value, list):
+                    merged[key] = list(set(merged.get(key, []) + (new_value or [])))
+
+        return merged
+
+    async def update_entity_with_lineage(
+        self,
+        entity_id: int,
+        new_data: Dict[str, Any],
+        source_record_id: int,
+        job_execution_id: int,
+        change_reason: str = "Data update"
+    ) -> Dict[str, Any]:
+        """
+        Update entity and create lineage + change log records.
+
+        Args:
+            entity_id: Entity to update
+            new_data: New data to merge
+            source_record_id: Source record ID for lineage
+            job_execution_id: Job execution ID
+            change_reason: Reason for change
+
+        Returns:
+            Updated entity info
+        """
+        try:
+            from app.infrastructure.db.models.audit.change_log import ChangeLog
+            from app.infrastructure.db.models.audit.data_lineage import DataLineage
+
+            self.log_operation("update_entity_with_lineage", {"entity_id": entity_id})
+
+            entity = self.db_session.get(Entity, entity_id)
+            if not entity:
+                raise EntityError(f"Entity {entity_id} not found")
+
+            # Merge data
+            old_data = entity.entity_data or {}
+            merged_data = self._apply_merge_strategy(old_data, new_data, "newer_wins", 1.0)
+
+            # Create change log
+            change_log = ChangeLog(
+                entity_id=entity_id,
+                change_type="UPDATE",
+                old_value=old_data,
+                new_value=merged_data,
+                change_details={"reason": change_reason}
+            )
+            self.db_session.add(change_log)
+
+            # Create lineage
+            lineage = DataLineage(
+                source_entity_id=source_record_id,
+                source_entity_type="StandardizedData",
+                target_entity_id=entity_id,
+                target_entity_type=entity.entity_type,
+                job_execution_id=job_execution_id,
+                lineage_metadata={"reason": change_reason}
+            )
+            self.db_session.add(lineage)
+
+            # Update entity
+            entity.entity_data = merged_data
+            entity.version += 1
+            entity.last_updated = get_current_timestamp()
+            self.db_session.add(entity)
+            self.db_session.commit()
+
+            return {
+                "entity_id": entity_id,
+                "version": entity.version,
+                "status": "updated_with_lineage"
+            }
+
+        except Exception as e:
+            self.db_session.rollback()
+            self.handle_error(e, "update_entity_with_lineage")
+
+    async def mark_as_duplicate(
+        self,
+        duplicate_entity_id: int,
+        master_entity_id: int,
+        match_score: float = 0.0,
+        match_metadata: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Mark entity as duplicate of another entity.
+
+        Args:
+            duplicate_entity_id: Entity identified as duplicate
+            master_entity_id: Primary/master entity
+            match_score: Similarity score (0.0-1.0)
+            match_metadata: Additional match information
+
+        Returns:
+            Duplicate marking result
+        """
+        try:
+            from app.infrastructure.db.models.processed.entity_relationships import EntityRelationship
+
+            self.log_operation("mark_as_duplicate", {
+                "duplicate_id": duplicate_entity_id,
+                "master_id": master_entity_id
+            })
+
+            duplicate = self.db_session.get(Entity, duplicate_entity_id)
+            master = self.db_session.get(Entity, master_entity_id)
+
+            if not duplicate or not master:
+                raise EntityError("One or both entities not found")
+
+            # Update master: increment duplicate_count
+            master.duplicate_count = (master.duplicate_count or 0) + 1
+            if not master.master_entity_id:
+                master.master_entity_id = master_entity_id
+            self.db_session.add(master)
+
+            # Create duplicate_of relationship
+            relationship = EntityRelationship(
+                entity_from=duplicate_entity_id,
+                entity_to=master_entity_id,
+                relationship_type="duplicate_of",
+                relationship_strength=float(match_score),
+                metadata=match_metadata or {}
+            )
+            self.db_session.add(relationship)
+            self.db_session.commit()
+
+            return {
+                "duplicate_entity_id": duplicate_entity_id,
+                "master_entity_id": master_entity_id,
+                "status": "marked_duplicate"
+            }
+
+        except Exception as e:
+            self.db_session.rollback()
+            self.handle_error(e, "mark_as_duplicate")
+
     # Private helper methods
     async def _delete_entity_relationships(self, entity_id: int):
         """Delete all relationships for an entity."""
@@ -372,6 +597,6 @@ class EntityService(BaseService):
             EntityRelationship.entity_to == entity_id
         ))
         relationships = self.db_session.execute(stmt).scalars().all()
-        
+
         for rel in relationships:
             self.db_session.delete(rel)

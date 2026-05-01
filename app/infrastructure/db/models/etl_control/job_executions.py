@@ -22,15 +22,21 @@ class JobExecutionBase(BaseModel):
     """Base model untuk JobExecution dengan field-field umum"""
     job_id: UUID = Field(foreign_key="etl_control.etl_jobs.id", index=True)
     batch_id: Optional[str] = Field(default=None, max_length=50, index=True)
-    start_time: Optional[datetime] = Field(default=None)
-    end_time: Optional[datetime] = Field(default=None)
+    start_time: Optional[datetime] = Field(default=None, alias="started_at")
+    end_time: Optional[datetime] = Field(default=None, alias="completed_at")
     status: ExecutionStatus = Field(default=ExecutionStatus.PENDING, index=True)
     records_processed: Optional[int] = Field(default=0)
     records_successful: Optional[int] = Field(default=0)
     records_failed: Optional[int] = Field(default=0)
+    records_extracted: Optional[int] = Field(default=0)
+    records_transformed: Optional[int] = Field(default=0)
+    records_loaded: Optional[int] = Field(default=0)
     execution_log: Optional[str] = Field(default=None)
     error_details: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
     performance_metrics: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSONB))
+    # Phase 7: Parent job tracking for orchestration
+    triggered_by_parent_job_id: Optional[UUID] = Field(default=None, index=True)
+    parent_execution_id: Optional[UUID] = Field(default=None, index=True)
 
 
 class JobExecution(JobExecutionBase, table=True):
@@ -39,20 +45,41 @@ class JobExecution(JobExecutionBase, table=True):
     __table_args__ = (
         {"schema": "etl_control"},
     )
-    
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
+    # Aliases for start/end times (backward compatibility)
+    @property
+    def started_at(self) -> Optional[datetime]:
+        """Alias for start_time"""
+        return self.start_time
+
+    @started_at.setter
+    def started_at(self, value: Optional[datetime]) -> None:
+        """Alias setter for start_time"""
+        self.start_time = value
+
+    @property
+    def completed_at(self) -> Optional[datetime]:
+        """Alias for end_time"""
+        return self.end_time
+
+    @completed_at.setter
+    def completed_at(self, value: Optional[datetime]) -> None:
+        """Alias setter for end_time"""
+        self.end_time = value
+
     # Relationships
     job: Optional["EtlJob"] = Relationship(back_populates="executions")
-    
+
     quality_check_results: List["QualityCheckResult"] = Relationship(back_populates="execution")
-    
+
     # New relationships for error tracking and performance monitoring
     error_logs: List["ErrorLog"] = Relationship(
         back_populates="job_execution",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
-    
+
     performance_metrics_records: List["PerformanceMetric"] = Relationship(
         back_populates="job_execution",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
