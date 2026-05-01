@@ -148,7 +148,7 @@ class DataSourceUpdate(SQLModel):
     connection_pool_size: Optional[int] = Field(default=None)
     timeout_seconds: Optional[int] = Field(default=None)
     retry_attempts: Optional[int] = Field(default=None)
-    metadata: Optional[Dict[str, Any]] = Field(default=None)
+    source_metadata: Optional[Dict[str, Any]] = Field(default=None)
 
 
 class DataSourceRead(DataSourceBase):
