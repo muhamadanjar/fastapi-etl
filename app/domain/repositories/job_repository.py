@@ -1,26 +1,24 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TypeVar, Generic
 from uuid import UUID
 
-from app.domain.entities.job import Job  # Assuming Job entity exists or will be created, or use generic
-# For now, we might rely on models if entities aren't fully separated yet, but Clean Architecture prefers Entities.
-# Given the current state, I'll define the interface using types that are likely available or generic.
+T = TypeVar('T')
 
-class IJobRepository(ABC):
+class IJobRepository(ABC, Generic[T]):
     @abstractmethod
-    def create(self, job_data: Dict[str, Any]) -> Any:
+    def create(self, job_data: Dict[str, Any]) -> T:
         pass
 
     @abstractmethod
-    def get(self, job_id: UUID) -> Optional[Any]:
+    def get(self, job_id: UUID) -> Optional[T]:
         pass
 
     @abstractmethod
-    def list(self, filters: Dict[str, Any] = None) -> List[Any]:
+    def list(self, filters: Dict[str, Any] = None) -> List[T]:
         pass
 
     @abstractmethod
-    def update(self, job_id: UUID, job_data: Dict[str, Any]) -> Any:
+    def update(self, job_id: UUID, job_data: Dict[str, Any]) -> T:
         pass
 
     @abstractmethod

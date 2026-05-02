@@ -6,7 +6,7 @@ from app.infrastructure.db.repositories.base import BaseRepository
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.domain.repositories.job_repository import IJobRepository
 
-class JobRepository(BaseRepository[EtlJob], IJobRepository):
+class JobRepository(BaseRepository[EtlJob], IJobRepository[EtlJob]):
     def __init__(self, session: Session):
         super().__init__(EtlJob, session)
 
