@@ -1,0 +1,9 @@
+stages:
+  - prepare
+  - test
+  - verify
+  - build-image-command
+  - build-image-app
+  - release
+  - deploy-app
+  - notification

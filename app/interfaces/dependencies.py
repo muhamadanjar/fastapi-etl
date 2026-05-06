@@ -5,19 +5,15 @@ from typing import Generator, Optional
 import jwt
 from sqlmodel import Session
 
-from app.core.database import get_session
 from app.core.config import settings
-from app.infrastructure.db.connection import database_manager, get_session_dependency
+from app.infrastructure.db.connection import get_session_dependency, get_async_session_dependency
 from app.application.services.auth_service import AuthService
 from app.infrastructure.db.models.auth import User
 
 # Security
 security = HTTPBearer()
 
-async def get_db():
-    """Database dependency"""
-    with get_session() as session:
-        yield session
+get_db = get_session_dependency
 
 
 # def get_session_dependency() -> Generator[Session, None, None]:

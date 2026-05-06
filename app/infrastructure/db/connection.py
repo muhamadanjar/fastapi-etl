@@ -38,77 +38,92 @@ class DatabaseManager:
         self._is_connected = False
         self._lock = asyncio.Lock()
     
-    def _get_database_config(self) -> dict:
-        """Get database configuration based on URL."""
+    def _normalize_sync_url(self, url: str) -> str:
+        """Ensure URL uses a sync driver."""
+        replacements = [
+            ("postgresql+asyncpg://", "postgresql://"),
+            ("postgresql+aiopg://", "postgresql://"),
+            ("mysql+aiomysql://", "mysql+pymysql://"),
+            ("mysql+asyncmy://", "mysql+pymysql://"),
+            ("sqlite+aiosqlite://", "sqlite://"),
+        ]
+        for async_prefix, sync_prefix in replacements:
+            if url.startswith(async_prefix):
+                return url.replace(async_prefix, sync_prefix, 1)
+        return url
+
+    def _normalize_async_url(self, url: str) -> str:
+        """Ensure URL uses an async driver."""
+        replacements = [
+            ("postgresql://", "postgresql+asyncpg://"),
+            ("postgresql+psycopg2://", "postgresql+asyncpg://"),
+            ("mysql://", "mysql+aiomysql://"),
+            ("mysql+pymysql://", "mysql+aiomysql://"),
+            ("sqlite://", "sqlite+aiosqlite://"),
+        ]
+        for sync_prefix, async_prefix in replacements:
+            if url.startswith(sync_prefix):
+                return url.replace(sync_prefix, async_prefix, 1)
+        return url
+
+    def _get_sync_engine_config(self, url: str) -> dict:
+        """Build kwargs for sync engine."""
         config = {
             "echo": self.settings.database_echo,
-            "pool_size": self.settings.database_pool_size,
-            "max_overflow": self.settings.database_max_overflow,
-            "pool_timeout": self.settings.database_pool_timeout,
-            "pool_recycle": self.settings.database_pool_recycle,
             "pool_pre_ping": True,
         }
-        
-        # SQLite specific configuration
-        if "sqlite" in self.settings.database_url:
+        if "sqlite" in url:
             config["connect_args"] = {"check_same_thread": False}
-            if ":memory:" in self.settings.database_url:
-                config["poolclass"] = StaticPool
-            else:
-                config["poolclass"] = QueuePool
+            config["poolclass"] = StaticPool if ":memory:" in url else QueuePool
         else:
+            config["pool_size"] = self.settings.database_pool_size
+            config["max_overflow"] = self.settings.database_max_overflow
+            config["pool_timeout"] = self.settings.database_pool_timeout
+            config["pool_recycle"] = self.settings.database_pool_recycle
             config["poolclass"] = QueuePool
-            
+            if "postgresql" in url:
+                config["connect_args"] = {"connect_timeout": 10}
         return config
-    
+
+    def _get_async_engine_config(self, url: str) -> dict:
+        """Build kwargs for async engine (no poolclass)."""
+        config = {
+            "echo": self.settings.database_echo,
+            "pool_pre_ping": True,
+        }
+        if "sqlite" in url:
+            pass  # aiosqlite does not support pool_size/max_overflow
+        else:
+            config["pool_size"] = self.settings.database_pool_size
+            config["max_overflow"] = self.settings.database_max_overflow
+            config["pool_timeout"] = self.settings.database_pool_timeout
+            config["pool_recycle"] = self.settings.database_pool_recycle
+            if "postgresql" in url:
+                config["connect_args"] = {"timeout": 10}  # asyncpg uses 'timeout'
+        return config
+
     def _create_sync_engine(self) -> Engine:
         """Create synchronous database engine."""
         try:
-            config = self._get_database_config()
-            
-            engine = create_engine(
-                self.settings.database_url,
-                **config
-            )
-            
-            logger.info(f"Sync database engine created: {self.settings.database_url}")
+            sync_url = self._normalize_sync_url(self.settings.database_url)
+            engine = create_engine(sync_url, **self._get_sync_engine_config(sync_url))
+            logger.info(f"Sync database engine created: {sync_url}")
             return engine
-            
         except Exception as e:
             logger.error(f"Failed to create sync database engine: {e}")
             raise DatabaseError(f"Database engine creation failed: {e}")
-    
+
     def _create_async_engine(self) -> AsyncEngine:
         """Create asynchronous database engine."""
         try:
-            # Convert sync URL to async URL if needed
-            async_url = self._convert_to_async_url(self.settings.database_url)
-            
-            # Remove sync-specific configs for async engine
-            config = self._get_database_config()
-            config.pop("poolclass", None)  # async engines handle pooling differently
-            
-            engine = create_async_engine(
-                async_url,
-                **config
-            )
-            
+            async_url = self._normalize_async_url(self.settings.database_url)
+            engine = create_async_engine(async_url, **self._get_async_engine_config(async_url))
             logger.info(f"Async database engine created: {async_url}")
             return engine
-            
         except Exception as e:
             logger.error(f"Failed to create async database engine: {e}")
             raise DatabaseError(f"Async database engine creation failed: {e}")
     
-    def _convert_to_async_url(self, url: str) -> str:
-        """Convert sync database URL to async URL."""
-        if url.startswith("postgresql://"):
-            return url.replace("postgresql://", "postgresql+asyncpg://")
-        elif url.startswith("mysql://"):
-            return url.replace("mysql://", "mysql+aiomysql://")
-        elif url.startswith("sqlite:///"):
-            return url.replace("sqlite:///", "sqlite+aiosqlite:///")
-        return url
     
     def get_engine(self) -> Engine:
         """Get or create synchronous database engine."""

@@ -160,7 +160,7 @@ class Settings(BaseSettings):
     database_pool_size: int = Field(default=5, env="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
     database_pool_timeout: int = Field(default=30, env="DATABASE_POOL_TIMEOUT")
-    database_pool_recycle: int = Field(default=1800, env="DATABASE_POOL_RECYCLE")
+    database_pool_recycle: int = Field(default=3600, env="DATABASE_POOL_RECYCLE")
     
     rabbitmq_settings: Optional[RabbitMqSettings] = Field(default_factory=RabbitMqSettings)
     # email_settings: Optional[EmailSettings] = EmailSettings()
