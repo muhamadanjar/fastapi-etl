@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
 from app.interfaces.dependencies import get_db, get_current_user
-from app.infrastructure.db.connection import (
+from app.infrastructure.db.manager import (
     database_manager,
     get_session_dependency,
     get_async_session_dependency

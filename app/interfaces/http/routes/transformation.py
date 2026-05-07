@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
-from app.infrastructure.db.connection import get_session_dependency
+from app.infrastructure.db.manager import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.schemas.transformation import (
     TransformationRuleCreate, TransformationRuleRead, TransformationRuleUpdate,

@@ -510,7 +510,7 @@ async def send_alert_notifications(self, alert_type: str = None, data: Dict[str,
         
         # Log error to database
         try:
-            from app.infrastructure.db.connection import get_session
+            from app.infrastructure.db.manager import get_session
             with get_session() as db:
                 asyncio.run(log_task_error(
                     db=db,
@@ -594,7 +594,7 @@ async def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None
         
         # Log error to database
         try:
-            from app.infrastructure.db.connection import get_session
+            from app.infrastructure.db.manager import get_session
             with get_session() as db:
                 asyncio.run(log_task_error(
                     db=db,

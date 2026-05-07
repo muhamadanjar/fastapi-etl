@@ -3,7 +3,7 @@ from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 
 from app.interfaces.dependencies import get_current_user
-from app.infrastructure.db.connection import get_session_dependency
+from app.infrastructure.db.manager import get_session_dependency
 from app.schemas.data_quality_schema import (
     QualityRuleCreate, QualityRuleRead, QualityRuleUpdate,
     QualityCheckRequest, QualityCheckResponse,

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 from app.interfaces.dependencies import get_current_user
-from app.infrastructure.db.connection import get_session_dependency
+from app.infrastructure.db.manager import get_session_dependency
 from app.schemas.entity_schemas import (
     EntityCreate, EntityUpdate, EntityResponse, EntityRelationshipResponse,
     EntitySearchRequest, EntityMergeRequest

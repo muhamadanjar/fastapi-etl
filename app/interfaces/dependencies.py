@@ -6,7 +6,7 @@ import jwt
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.infrastructure.db.connection import get_session_dependency, get_async_session_dependency
+from app.infrastructure.db.manager import get_session_dependency, get_async_session_dependency
 from app.application.services.auth_service import AuthService
 from app.infrastructure.db.models.auth import User
 

@@ -5,6 +5,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
+from app.config.database import DatabaseSettings
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -155,13 +156,8 @@ class Settings(BaseSettings):
     PORT: int = Field(default=8000, env="PORT")
 
     redis_url: Optional[str] = Field(env="REDIS_URL", default=None)
-    database_url: str = Field(default=os.environ.get("DATABASE_URL"), env="DATABASE_URL")
-    database_echo: bool = Field(default=False, env="DATABASE_ECHO")
-    database_pool_size: int = Field(default=5, env="DATABASE_POOL_SIZE")
-    database_max_overflow: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
-    database_pool_timeout: int = Field(default=30, env="DATABASE_POOL_TIMEOUT")
-    database_pool_recycle: int = Field(default=3600, env="DATABASE_POOL_RECYCLE")
-    
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+
     rabbitmq_settings: Optional[RabbitMqSettings] = Field(default_factory=RabbitMqSettings)
     # email_settings: Optional[EmailSettings] = EmailSettings()
     cors_settings: Optional[CORSSettings] = Field(default_factory=CORSSettings)
@@ -179,9 +175,10 @@ class Settings(BaseSettings):
     max_page_size: int = Field(default=100, env="MAX_PAGE_SIZE")
 
     model_config = SettingsConfigDict(
-        env_file=str(BASE_DIR / ".env"), 
-        extra="allow", 
-        env_file_encoding="utf-8"
+        env_file=str(BASE_DIR / ".env"),
+        extra="allow",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
     )
 
 

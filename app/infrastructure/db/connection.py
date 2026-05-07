@@ -1,381 +1,172 @@
-# database/manager.py - Improved version
 import asyncio
 import logging
+from typing import AsyncIterator, Iterator, Optional
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncIterator, Iterator, Optional, Generator
 
-from sqlmodel import create_engine, Session, SQLModel, select
+from sqlalchemy import Engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from sqlalchemy.pool import QueuePool, StaticPool
-from sqlalchemy.ext.asyncio import (
-    create_async_engine, 
-    AsyncSession, 
-    async_sessionmaker,
-    AsyncEngine
-)
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import create_engine, Session, SQLModel, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from ...core.config import get_settings
-from ...core.exceptions import DatabaseError
+from app.config.database import DatabaseSettings
+from app.core.exceptions import AppException, DatabaseError
 
 logger = logging.getLogger(__name__)
 
-# Import all models here to ensure they're registered with SQLModel.metadata
-from . import models  # Import the models module (adjust as needed)
 
+class DatabaseConnection:
+    """Manages a single named database connection (sync & async)."""
 
-class DatabaseManager:
-    """
-    Database connection manager with both sync and async support.
-    Improved version with better type hints and session management.
-    """
-    
-    def __init__(self):
-        self.settings = get_settings()
+    def __init__(self, name: str, config: DatabaseSettings):
+        self.name = name
+        self.config = config
         self._engine: Optional[Engine] = None
         self._async_engine: Optional[AsyncEngine] = None
         self._async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
         self._is_connected = False
         self._lock = asyncio.Lock()
-    
-    def _normalize_sync_url(self, url: str) -> str:
-        """Ensure URL uses a sync driver."""
-        replacements = [
-            ("postgresql+asyncpg://", "postgresql://"),
-            ("postgresql+aiopg://", "postgresql://"),
-            ("mysql+aiomysql://", "mysql+pymysql://"),
-            ("mysql+asyncmy://", "mysql+pymysql://"),
-            ("sqlite+aiosqlite://", "sqlite://"),
-        ]
-        for async_prefix, sync_prefix in replacements:
-            if url.startswith(async_prefix):
-                return url.replace(async_prefix, sync_prefix, 1)
-        return url
 
-    def _normalize_async_url(self, url: str) -> str:
-        """Ensure URL uses an async driver."""
-        replacements = [
-            ("postgresql://", "postgresql+asyncpg://"),
-            ("postgresql+psycopg2://", "postgresql+asyncpg://"),
-            ("mysql://", "mysql+aiomysql://"),
-            ("mysql+pymysql://", "mysql+aiomysql://"),
-            ("sqlite://", "sqlite+aiosqlite://"),
-        ]
-        for sync_prefix, async_prefix in replacements:
-            if url.startswith(sync_prefix):
-                return url.replace(sync_prefix, async_prefix, 1)
-        return url
+    def _get_sync_engine_config(self) -> dict:
+        config_dict = self.config.engine_kwargs.copy()
+        db_url = self.config.get_database_url(sync=True)
 
-    def _get_sync_engine_config(self, url: str) -> dict:
-        """Build kwargs for sync engine."""
-        config = {
-            "echo": self.settings.database_echo,
-            "pool_pre_ping": True,
-        }
-        if "sqlite" in url:
-            config["connect_args"] = {"check_same_thread": False}
-            config["poolclass"] = StaticPool if ":memory:" in url else QueuePool
+        if "sqlite" in db_url:
+            config_dict["connect_args"] = {"check_same_thread": False}
+            config_dict["poolclass"] = StaticPool if ":memory:" in db_url else QueuePool
         else:
-            config["pool_size"] = self.settings.database_pool_size
-            config["max_overflow"] = self.settings.database_max_overflow
-            config["pool_timeout"] = self.settings.database_pool_timeout
-            config["pool_recycle"] = self.settings.database_pool_recycle
-            config["poolclass"] = QueuePool
-            if "postgresql" in url:
-                config["connect_args"] = {"connect_timeout": 10}
-        return config
+            config_dict["poolclass"] = QueuePool
+            config_dict["connect_args"] = {
+                "connect_timeout": getattr(self.config, "connect_timeout", 10)
+            }
 
-    def _get_async_engine_config(self, url: str) -> dict:
-        """Build kwargs for async engine (no poolclass)."""
-        config = {
-            "echo": self.settings.database_echo,
-            "pool_pre_ping": True,
-        }
-        if "sqlite" in url:
-            pass  # aiosqlite does not support pool_size/max_overflow
-        else:
-            config["pool_size"] = self.settings.database_pool_size
-            config["max_overflow"] = self.settings.database_max_overflow
-            config["pool_timeout"] = self.settings.database_pool_timeout
-            config["pool_recycle"] = self.settings.database_pool_recycle
-            if "postgresql" in url:
-                config["connect_args"] = {"timeout": 10}  # asyncpg uses 'timeout'
-        return config
+        return config_dict
+
+    def _get_async_engine_config(self) -> dict:
+        config_dict = self.config.async_engine_kwargs.copy()
+        db_url = self.config.get_database_url(sync=True)
+
+        if "sqlite" in db_url:
+            config_dict["connect_args"] = {"check_same_thread": False}
+        elif "postgresql" in db_url:
+            config_dict["connect_args"] = {
+                "timeout": getattr(self.config, "connect_timeout", 10)
+            }
+        elif "mysql" in db_url:
+            config_dict["connect_args"] = {
+                "connect_timeout": getattr(self.config, "connect_timeout", 10)
+            }
+
+        return config_dict
 
     def _create_sync_engine(self) -> Engine:
-        """Create synchronous database engine."""
         try:
-            sync_url = self._normalize_sync_url(self.settings.database_url)
-            engine = create_engine(sync_url, **self._get_sync_engine_config(sync_url))
-            logger.info(f"Sync database engine created: {sync_url}")
+            sync_url = self.config.get_database_url(sync=True)
+            engine = create_engine(sync_url, **self._get_sync_engine_config())
+            logger.info(f"Sync engine '{self.name}' created.")
             return engine
         except Exception as e:
-            logger.error(f"Failed to create sync database engine: {e}")
-            raise DatabaseError(f"Database engine creation failed: {e}")
+            logger.error(f"Failed to create sync engine '{self.name}': {e}")
+            raise DatabaseError(f"Sync engine creation failed for '{self.name}': {e}")
 
     def _create_async_engine(self) -> AsyncEngine:
-        """Create asynchronous database engine."""
         try:
-            async_url = self._normalize_async_url(self.settings.database_url)
-            engine = create_async_engine(async_url, **self._get_async_engine_config(async_url))
-            logger.info(f"Async database engine created: {async_url}")
+            async_url = self.config.get_database_url(sync=False)
+            engine = create_async_engine(async_url, **self._get_async_engine_config())
+            logger.info(f"Async engine '{self.name}' created.")
             return engine
         except Exception as e:
-            logger.error(f"Failed to create async database engine: {e}")
-            raise DatabaseError(f"Async database engine creation failed: {e}")
-    
-    
+            logger.error(f"Failed to create async engine '{self.name}': {e}")
+            raise DatabaseError(f"Async engine creation failed for '{self.name}': {e}")
+
     def get_engine(self) -> Engine:
-        """Get or create synchronous database engine."""
         if self._engine is None:
             self._engine = self._create_sync_engine()
         return self._engine
-    
+
     async def get_async_engine(self) -> AsyncEngine:
-        """Get or create asynchronous database engine."""
         if self._async_engine is None:
             async with self._lock:
-                if self._async_engine is None:  # Double-check locking
+                if self._async_engine is None:
                     self._async_engine = self._create_async_engine()
                     self._async_session_maker = async_sessionmaker(
                         self._async_engine,
                         class_=AsyncSession,
-                        expire_on_commit=False
+                        expire_on_commit=False,
                     )
         return self._async_engine
-    
+
     @contextmanager
     def get_session(self) -> Iterator[Session]:
-        """Get database session with automatic cleanup."""
         engine = self.get_engine()
         session = Session(engine)
-        
         try:
-            logger.debug(f"Database session created: {id(session)}")
             yield session
             session.commit()
-            logger.debug(f"Database session committed: {id(session)}")
-            
         except Exception as e:
-            logger.error(f"Database session error: {e}")
             session.rollback()
-            logger.debug(f"Database session rolled back: {id(session)}")
-            raise DatabaseError(f"Database operation failed: {e}")
-            
+            raise DatabaseError(f"Session error '{self.name}': {e}")
         finally:
             session.close()
-            logger.debug(f"Database session closed: {id(session)}")
-    
+
     @asynccontextmanager
     async def get_async_session(self) -> AsyncIterator[AsyncSession]:
-        """Get async database session with automatic cleanup."""
         if self._async_session_maker is None:
-            await self.get_async_engine()  # Initialize async engine and session maker
-        
+            await self.get_async_engine()
+
         async with self._async_session_maker() as session:
             try:
-                logger.debug(f"Async database session created: {id(session)}")
                 yield session
                 await session.commit()
-                logger.debug(f"Async database session committed: {id(session)}")
-                
             except Exception as e:
-                logger.error(f"Async database session error: {e}")
                 await session.rollback()
-                logger.debug(f"Async database session rolled back: {id(session)}")
-                raise DatabaseError(f"Async database operation failed: {e}")
-    
+                if isinstance(e, AppException):
+                    raise
+                raise DatabaseError(
+                    f"Database operation failed: {str(e)}",
+                    details={"original_error": type(e).__name__},
+                )
+
     async def connect(self) -> None:
-        """Initialize database connection and create tables."""
-        try:
-            logger.info("Connecting to database...")
-            
-            # Initialize engines
-            self.get_engine()
-            await self.get_async_engine()
-            
-            # Create tables
-            await self.create_tables()
-            
-            # Health check
-            if not await self.health_check():
-                raise DatabaseError("Database health check failed after connection")
-            
-            self._is_connected = True
-            logger.info("Database connected successfully")
-            
-        except Exception as e:
-            logger.error(f"Database connection failed: {e}")
-            raise DatabaseError(f"Database connection failed: {e}")
-    
+        self.get_engine()
+        await self.get_async_engine()
+        self._is_connected = True
+
     async def disconnect(self) -> None:
-        """Close database connections."""
-        try:
-            logger.info("Disconnecting from database...")
-            
-            if self._async_engine:
-                await self._async_engine.dispose()
-                logger.debug("Async database engine disposed")
-            
-            if self._engine:
-                self._engine.dispose()
-                logger.debug("Sync database engine disposed")
-            
-            self._engine = None
-            self._async_engine = None
-            self._async_session_maker = None
-            self._is_connected = False
-            
-            logger.info("Database disconnected successfully")
-            
-        except Exception as e:
-            logger.error(f"Database disconnection failed: {e}")
-            # Don't raise exception during cleanup
-            
-    async def create_tables(self) -> None:
-        """Create all database tables."""
-        logger.info("Creating database tables...")
-        
-        try:
-            # Use async engine for table creation if available
-            if self._async_engine:
-                async with self._async_engine.begin() as conn:
-                    await conn.run_sync(SQLModel.metadata.create_all)
-            else:
-                engine = self.get_engine()
-                SQLModel.metadata.create_all(bind=engine)
-            
-            logger.info("Database tables created successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to create database tables: {e}")
-            raise DatabaseError(f"Database table creation failed: {e}")
-    
-    async def drop_tables(self) -> None:
-        """Drop all database tables."""
-        try:
-            logger.warning("Dropping all database tables...")
-            
-            if self._async_engine:
-                async with self._async_engine.begin() as conn:
-                    await conn.run_sync(SQLModel.metadata.drop_all)
-            else:
-                engine = self.get_engine()
-                SQLModel.metadata.drop_all(bind=engine)
-            
-            logger.warning("All database tables dropped")
-            
-        except Exception as e:
-            logger.error(f"Failed to drop database tables: {e}")
-            raise DatabaseError(f"Database table drop failed: {e}")
-    
+        if self._async_engine:
+            await self._async_engine.dispose()
+        if self._engine:
+            self._engine.dispose()
+        self._engine = None
+        self._async_engine = None
+        self._async_session_maker = None
+        self._is_connected = False
+
     async def health_check(self) -> bool:
-        """Check database health and connectivity."""
         try:
             async with self.get_async_session() as session:
                 result = await session.execute(select(1))
                 return result.scalar() == 1
-                
-        except Exception as e:
-            logger.error(f"Database health check failed: {e}")
+        except Exception:
             return False
-    
-    @property
-    def is_connected(self) -> bool:
-        """Check if database is connected."""
-        return self._is_connected
-    
-    async def execute_raw_sql(self, sql: str) -> any:
-        """Execute raw SQL query (for admin operations)."""
-        try:
-            async with self.get_async_session() as session:
-                result = await session.execute(sql)
-                return result.fetchall()
-        except Exception as e:
-            logger.error(f"Raw SQL execution failed: {e}")
-            raise DatabaseError(f"Raw SQL execution failed: {e}")
 
+    async def create_tables(self) -> None:
+        engine = await self.get_async_engine()
+        async with engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
 
-# Global database manager instance
-database_manager = DatabaseManager()
+    async def create_async_session(self) -> AsyncSession:
+        """
+        Create async session without context manager.
+        WARNING: You must call session.close() manually!
+        """
+        if self._async_session_maker is None:
+            await self.get_async_engine()
+        return self._async_session_maker()
 
-
-# Improved FastAPI dependencies
-def get_session_dependency() -> Generator[Session, None, None]:
-    """FastAPI dependency for getting database session."""
-    with database_manager.get_session() as session:
-        yield session
-
-
-async def get_async_session_dependency() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency for getting async database session."""
-    async with database_manager.get_async_session() as session:
-        yield session
-
-
-# Backward compatibility functions
-def get_engine() -> Engine:
-    """Get database engine (backward compatibility)."""
-    return database_manager.get_engine()
-
-
-@contextmanager
-def get_session() -> Iterator[Session]:
-    """Get database session (backward compatibility)."""
-    with database_manager.get_session() as session:
-        yield session
-
-
-async def init_database() -> None:
-    """Initialize database (async version)."""
-    await database_manager.connect()
-
-
-async def drop_database() -> None:
-    """Drop database (async version)."""
-    await database_manager.drop_tables()
-
-
-async def check_database_health() -> bool:
-    """Check database health (async version)."""
-    return await database_manager.health_check()
-
-
-async def close_database_connections() -> None:
-    """Close database connections (async version)."""
-    await database_manager.disconnect()
-
-
-# Sync versions for backward compatibility
-def init_database_sync() -> None:
-    """Initialize database (sync version)."""
-    asyncio.run(database_manager.connect())
-
-
-def drop_database_sync() -> None:
-    """Drop database (sync version)."""
-    asyncio.run(database_manager.drop_tables())
-
-
-def check_database_health_sync() -> bool:
-    """Check database health (sync version)."""
-    return asyncio.run(database_manager.health_check())
-
-
-def close_database_connections_sync() -> None:
-    """Close database connections (sync version)."""
-    asyncio.run(database_manager.disconnect())
-
-
-# FastAPI event handlers
-async def on_startup():
-    """Database startup handler."""
-    logger.info("Initializing database connections...")
-    await database_manager.connect()
-
-
-async def on_shutdown():
-    """Database shutdown handler."""
-    logger.info("Closing database connections...")
-    await database_manager.disconnect()
-    
+    def create_session(self) -> Session:
+        """
+        Create sync session without context manager.
+        WARNING: You must call session.close() manually!
+        """
+        return Session(self.get_engine())

@@ -9,7 +9,7 @@ from app.schemas.job_schemas import (
     JobCreate, JobUpdate, JobResponse, JobExecutionResponse, 
     JobScheduleCreate, JobConfigUpdate
 )
-from app.infrastructure.db.connection import get_session_dependency
+from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.etl_service import ETLService
 from app.infrastructure.db.models import User
 from app.core.response import APIResponse

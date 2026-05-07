@@ -14,7 +14,7 @@ from celery import Task
 from celery.utils.log import get_task_logger
 
 from app.tasks.celery_app import celery_app
-from app.infrastructure.db.connection import get_session
+from app.infrastructure.db.manager import get_session
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution

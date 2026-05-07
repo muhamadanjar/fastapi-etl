@@ -6,7 +6,7 @@ from app.interfaces.dependencies import get_current_user, get_db
 from app.schemas.auth import UserCreate, UserRead as UserResponse, Token, PasswordChange
 from app.application.services.auth_service import AuthService
 from app.infrastructure.db.models import User
-# from app.infrastructure.db.connection import get_session_dependency
+# from app.infrastructure.db.manager import get_session_dependency
 
 router = APIRouter()
 

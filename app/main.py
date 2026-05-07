@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.logging import setup_logging
 from app.core.config import get_settings
 from app.core.exceptions import AppException
-from app.infrastructure.db.connection import database_manager
+from app.infrastructure.db.manager import database_manager
 from app.infrastructure.cache import redis_manager
 from app.infrastructure.cache import cache_manager
 from app.infrastructure.messaging import messaging_manager, Message

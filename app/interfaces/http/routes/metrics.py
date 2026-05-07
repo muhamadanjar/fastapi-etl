@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app.infrastructure.db.connection import get_session
+from app.infrastructure.db.manager import get_session
 from app.application.services.metrics_service import MetricsService
 from app.infrastructure.db.models.etl_control.performance_metrics import PerformanceMetricRead
 from app.interfaces.dependencies import get_current_user

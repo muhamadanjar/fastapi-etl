@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.infrastructure.db.connection import get_session_dependency
+from app.infrastructure.db.manager import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.application.services.dependency_service import DependencyService, DependencyError
 from app.infrastructure.db.models.etl_control.job_dependencies import (

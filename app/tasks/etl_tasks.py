@@ -21,7 +21,7 @@ from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.infrastructure.db.models.audit.data_lineage import DataLineage
-from app.infrastructure.db.connection import get_session
+from app.infrastructure.db.manager import get_session
 from app.processors import get_processor
 from app.transformers import create_transformation_pipeline
 from app.application.services.etl_service import ETLService
