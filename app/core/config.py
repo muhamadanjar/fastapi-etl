@@ -131,11 +131,12 @@ class StorageSettings(BaseSettings):
 
 class SecuritySettings(BaseSettings):
     """Security configuration settings."""
-    
+
     secret_key: str = Field(..., env="SECRET_KEY")
     algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     access_token_expire: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE") # minutes
     refresh_token_expire: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE") # days
+    usermanagement_api_url: str = Field(default="http://localhost:8000", env="USERMANAGEMENT_API_URL")
 
 
 class LoggingSettings(BaseSettings):

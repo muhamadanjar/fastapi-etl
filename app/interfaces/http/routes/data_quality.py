@@ -11,7 +11,7 @@ from app.schemas.data_quality_schema import (
     QualityReportRequest, QualityReportResponse
 )
 from app.application.services.data_quality_service import DataQualityService
-from app.infrastructure.db.models.auth import User
+from app.schemas.remote_user import RemoteUserInfo as User
 
 router = APIRouter()
 

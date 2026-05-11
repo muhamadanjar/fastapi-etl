@@ -11,7 +11,7 @@ from app.schemas.job_schemas import (
 )
 from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.etl_service import ETLService
-from app.infrastructure.db.models import User
+from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
 
 router = APIRouter()

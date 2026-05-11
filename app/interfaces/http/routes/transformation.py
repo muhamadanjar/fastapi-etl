@@ -11,7 +11,7 @@ from app.schemas.transformation import (
     CustomTransformRequest, TestTransformRequest, TestTransformResponse
 )
 from app.application.services.transformation_service import TransformationService
-from app.infrastructure.db.models.auth import User
+from app.schemas.remote_user import RemoteUserInfo as User
 
 router = APIRouter()
 

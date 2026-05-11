@@ -10,7 +10,7 @@ from app.schemas.entity_schemas import (
     EntitySearchRequest, EntityMergeRequest
 )
 from app.application.services.entity_service import EntityService
-from app.infrastructure.db.models import User
+from app.schemas.remote_user import RemoteUserInfo as User
 
 router = APIRouter()
 

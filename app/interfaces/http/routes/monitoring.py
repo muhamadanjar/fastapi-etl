@@ -11,7 +11,7 @@ from app.infrastructure.db.manager import (
     get_async_session_dependency
 )
 from app.application.services.monitoring_service import MonitoringService
-from app.infrastructure.db.models import User
+from app.schemas.remote_user import RemoteUserInfo as User
 
 router = APIRouter()
 
