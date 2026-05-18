@@ -47,6 +47,11 @@ async def upload_file(
         user_id=current_user.id
     )
 
+@router.patch("/upload", response_model=FileUploadResponse)
+def chunk_upload():
+    pass
+
+
 @router.get("/", response_model=FileListResponse)
 async def list_files(
     skip: int = Query(0, ge=0, description="Number of records to skip"),

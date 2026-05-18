@@ -18,6 +18,7 @@ import re
 
 from app.utils.logger import get_logger
 from app.core.exceptions import FileError
+from services.etl_api.app.core.constants import FILE_UPLOAD_THRESHOLD
 
 logger = get_logger(__name__)
 
@@ -74,6 +75,51 @@ MAX_FILE_SIZES = {
     'AVRO': 1024 * 1024 * 1024,    # 1GB
     'ARCHIVE': 2 * 1024 * 1024 * 1024  # 2GB
 }
+
+def make_size(size: str) -> int:
+    """
+    Convert a size string to bytes.
+
+    Args:
+        size: Size string like '10MB', '512kb', '1.5GB', or '1024'.
+
+    Returns:
+        Integer number of bytes.
+
+    Raises:
+        ValueError: If the size string is invalid.
+    """
+    try:
+        if not isinstance(size, str):
+            raise ValueError("size must be a string")
+
+        normalized = size.strip().upper()
+        if not normalized:
+            raise ValueError("size string is empty")
+
+        pattern = r'^([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB|PB)?$'
+        match = re.match(pattern, normalized)
+        if not match:
+            raise ValueError(f"invalid size format: {size}")
+
+        value = float(match.group(1))
+        unit = match.group(2) or 'B'
+
+        multipliers = {
+            'B': 1,
+            'KB': 1024,
+            'MB': 1024 ** 2,
+            'GB': 1024 ** 3,
+            'TB': 1024 ** 4,
+            'PB': 1024 ** 5,
+        }
+
+        bytes_value = int(value * multipliers[unit])
+        return bytes_value
+
+    except Exception as e:
+        logger.log_error("make_size", e, {"size": size})
+        raise
 
 
 def get_file_extension(filename: str) -> str:
@@ -344,6 +390,7 @@ def get_file_type(content_type: str) -> str:
     except Exception as e:
         logger.log_error("get_file_type", e, {"content_type": content_type})
         return "UNKNOWN"
+
 
 def detect_file_type(filename: str) -> str:
     """
