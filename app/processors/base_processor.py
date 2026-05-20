@@ -14,7 +14,6 @@ from app.core.exceptions import FileProcessingException
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
-from app.application.services.rejected_records_service import RejectedRecordsService
 
 logger = get_logger(__name__)
 
@@ -120,6 +119,9 @@ class BaseProcessor(ABC):
         
         start_time = datetime.utcnow()
         
+        # Deferred import to break circular dependency:
+        # base_processor → application.services → file_service → processors
+        from app.application.services.rejected_records_service import RejectedRecordsService
         # Initialize rejected records service
         rejected_service = RejectedRecordsService(self.db_session)
         

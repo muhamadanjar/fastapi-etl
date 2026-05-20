@@ -1,15 +1,32 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query, Request, Header
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 
 from app.interfaces.dependencies import get_current_user
 from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
+from app.schemas.upload_session import (
+    InitUploadSessionRequest,
+    InitUploadSessionResponse,
+    ChunkUploadResponse,
+    UploadSessionStatusResponse,
+)
 from app.application.services.file_service import FileService
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.infrastructure.db.manager import get_session_dependency
 
 router = APIRouter()
+
+@router.post("/upload/session", response_model=InitUploadSessionResponse)
+async def init_upload_session(
+    request: InitUploadSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency),
+) -> InitUploadSessionResponse:
+    """Initiate a chunked upload session for large files"""
+    service = FileService(db)
+    return await service.init_upload_session(request, user_id=current_user.id)
+
 
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
@@ -47,9 +64,29 @@ async def upload_file(
         user_id=current_user.id
     )
 
-@router.patch("/upload", response_model=FileUploadResponse)
-def chunk_upload():
-    pass
+@router.patch("/upload", response_model=ChunkUploadResponse)
+async def chunk_upload(
+    session_id: UUID = Query(..., description="Upload session ID"),
+    content_range: str = Header(..., description="Content-Range header: bytes start-end/total"),
+    request: Request = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency),
+) -> ChunkUploadResponse:
+    """Upload a single chunk with Content-Range header"""
+    chunk_data = await request.body()
+    service = FileService(db)
+    return await service.upload_chunk(session_id, content_range, chunk_data)
+
+
+@router.get("/upload/session/{session_id}", response_model=UploadSessionStatusResponse)
+async def get_upload_session_status(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency),
+) -> UploadSessionStatusResponse:
+    """Get current status of upload session (for resume capability)"""
+    service = FileService(db)
+    return await service.get_upload_session_status(session_id)
 
 
 @router.get("/", response_model=FileListResponse)

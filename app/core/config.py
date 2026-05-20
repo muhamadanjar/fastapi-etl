@@ -129,6 +129,11 @@ class StorageSettings(BaseSettings):
     thumbnail_sizes: List[int] = [150, 300, 600]
     image_quality: int = 85
 
+    # Chunked upload settings
+    chunk_size: int = Field(default=5 * 1024 * 1024, env="UPLOAD_CHUNK_SIZE")  # 5MB per chunk
+    chunk_upload_threshold: int = Field(default=10 * 1024 * 1024, env="UPLOAD_THRESHOLD")  # 10MB
+    upload_session_expire_hours: int = Field(default=24, env="UPLOAD_SESSION_EXPIRE_HOURS")
+
 class SecuritySettings(BaseSettings):
     """Security configuration settings."""
 

@@ -18,7 +18,7 @@ import re
 
 from app.utils.logger import get_logger
 from app.core.exceptions import FileError
-from services.etl_api.app.core.constants import FILE_UPLOAD_THRESHOLD
+from app.core.constants import FILE_UPLOAD_THRESHOLD
 
 logger = get_logger(__name__)
 

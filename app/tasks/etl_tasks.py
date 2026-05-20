@@ -16,7 +16,6 @@ import pandas as pd
 from app.core.enums import ProcessingStatus
 
 from .celery_app import celery_app
-from app.interfaces.dependencies import get_db
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution

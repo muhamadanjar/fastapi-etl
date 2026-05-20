@@ -7,8 +7,8 @@ import os
 import json
 import uuid
 import shutil
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import UploadFile, HTTPException, status
 from fastapi.responses import FileResponse
@@ -17,20 +17,28 @@ from sqlalchemy import select, and_, or_
 from uuid import UUID
 
 from app.infrastructure.db.repositories.file_repository import FileRegistryRepository
+from app.infrastructure.db.repositories.upload_session_repository import UploadSessionRepository
 from app.schemas.base import PaginatedMetaDataResponse
 from app.application.services.base import BaseService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
+from app.infrastructure.db.models.raw_data.upload_session import UploadSession, UploadSessionStatus
 from app.schemas.file_upload import FileMetadata, FilePreview, FileStructureAnalysis, FileUploadResponse, FileListResponse, FileDetailResponse, FileValidationResult
-from app.core.exceptions import FileError, ServiceError
+from app.schemas.upload_session import (
+    InitUploadSessionRequest,
+    InitUploadSessionResponse,
+    ChunkUploadResponse,
+    UploadSessionStatusResponse,
+)
+from app.core.exceptions import FileError, ServiceError, AppException
 from app.core.enums import ProcessingStatus, FileTypeEnum
+from app.core.config import settings
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
 from app.utils.date_utils import get_current_timestamp
-from app.processors.csv_processor import CSVProcessor
-from app.processors.excel_processor import ExcelProcessor
-from app.processors.json_processor import JSONProcessor
-from app.processors.xml_processor import XMLProcessor
+# Processor imports are deferred inside _get_processor() to break the circular
+# import cycle: processors.__init__ → base_processor → application.services →
+# file_service → processors.{csv,excel,json,xml}_processor → base_processor
 
 
 class FileService(BaseService):
@@ -43,6 +51,7 @@ class FileService(BaseService):
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.repo = FileRegistryRepository(db)
+        self.upload_session_repo = UploadSessionRepository(db)
     
     def get_service_name(self) -> str:
         return "FileService"
@@ -497,6 +506,16 @@ class FileService(BaseService):
     
     def _get_processor(self, file_type: str):
         """Get appropriate processor based on file type."""
+        # Deferred imports: these processor subclasses inherit from BaseProcessor
+        # which (at module-level) formerly imported RejectedRecordsService from
+        # this same application.services package, forming a cycle.  Importing
+        # here — inside the method body — ensures processors.__init__ is fully
+        # initialised before these names are resolved.
+        from app.processors.csv_processor import CSVProcessor
+        from app.processors.excel_processor import ExcelProcessor
+        from app.processors.json_processor import JSONProcessor
+        from app.processors.xml_processor import XMLProcessor
+
         processors = {
             FileTypeEnum.CSV.value: CSVProcessor,
             FileTypeEnum.EXCEL.value: ExcelProcessor,
@@ -517,9 +536,270 @@ class FileService(BaseService):
         raw_records = self.db.execute(raw_records_stmt).scalars().all()
         for record in raw_records:
             self.db.delete(record)
-        
+
         # Delete column structure
         column_structure_stmt = select(ColumnStructure).where(ColumnStructure.file_id == file_id)
         columns = self.db.execute(column_structure_stmt).scalars().all()
         for column in columns:
             self.db.delete(column)
+
+    # ============ CHUNKED UPLOAD METHODS ============
+
+    async def init_upload_session(
+        self, request: InitUploadSessionRequest, user_id: UUID
+    ) -> InitUploadSessionResponse:
+        """Initialize a new chunked upload session"""
+        try:
+            self.log_operation("init_upload_session", {"file_name": request.file_name, "file_size": request.file_size})
+
+            # Calculate chunks
+            chunk_size = settings.storage_settings.chunk_size
+            total_chunks = ceil(request.file_size / chunk_size)
+            expires_at = datetime.utcnow() + timedelta(
+                hours=settings.storage_settings.upload_session_expire_hours
+            )
+
+            # Generate file path
+            file_uuid = uuid.uuid4()
+            ext = Path(request.file_name).suffix or ".bin"
+            file_path = f"{file_uuid}{ext}"  # Store only relative path
+
+            # Pre-create sparse temp file
+            temp_dir = Path(settings.storage_settings.local_storage_path) / "chunks"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_path = temp_dir / f"{file_uuid}.part"
+
+            # Create sparse file
+            with open(temp_path, "wb") as f:
+                f.seek(request.file_size - 1)
+                f.write(b"\0")
+
+            # Parse metadata if provided
+            file_metadata = {}
+            if request.metadata:
+                try:
+                    file_metadata = json.loads(request.metadata)
+                except Exception:
+                    pass
+
+            # Create session record
+            session_data = {
+                "file_name": request.file_name,
+                "file_path": file_path,
+                "file_size": request.file_size,
+                "file_type": request.file_type,
+                "chunk_size": chunk_size,
+                "total_chunks": total_chunks,
+                "status": UploadSessionStatus.PENDING,
+                "source_system": request.source_system,
+                "batch_id": request.batch_id,
+                "file_metadata": file_metadata,
+                "created_by": user_id,
+                "expires_at": expires_at,
+                "chunk_map": {},
+            }
+
+            session = await self.upload_session_repo.create(session_data)
+
+            return InitUploadSessionResponse(
+                session_id=session.id,
+                chunk_size=chunk_size,
+                total_chunks=total_chunks,
+                expires_at=expires_at,
+                status=session.status,
+            )
+
+        except Exception as e:
+            self.log_error(e, "init_upload_session")
+            raise AppException(status_code=400, message=f"Failed to initialize upload session: {str(e)}")
+
+    async def upload_chunk(
+        self, session_id: UUID, content_range: str, chunk_data: bytes
+    ) -> ChunkUploadResponse:
+        """Upload a single chunk with Content-Range header"""
+        try:
+            # Get session
+            session = await self.upload_session_repo.get_by_id(session_id)
+            if not session:
+                raise AppException(status_code=404, message="Upload session not found")
+
+            # Check expiry
+            if datetime.utcnow() > session.expires_at:
+                await self.upload_session_repo.mark_expired(session_id)
+                raise AppException(status_code=410, message="Upload session expired")
+
+            # Check status
+            if session.status not in [
+                UploadSessionStatus.PENDING,
+                UploadSessionStatus.UPLOADING,
+                UploadSessionStatus.PAUSED,
+            ]:
+                raise AppException(
+                    status_code=400,
+                    message=f"Cannot upload to session with status: {session.status}",
+                )
+
+            # Parse Content-Range header
+            start, end, total = self._parse_content_range(content_range)
+
+            # Validate range
+            if total != session.file_size:
+                raise AppException(
+                    status_code=400,
+                    message=f"File size mismatch: expected {session.file_size}, got {total}",
+                )
+
+            if end > session.file_size:
+                raise AppException(
+                    status_code=416,
+                    message="Range exceeds file size",
+                )
+
+            # Calculate chunk index
+            chunk_index = start // session.chunk_size
+
+            # Write chunk to temp file
+            file_uuid = session.file_path.split(".")[0]
+            temp_path = self._get_chunk_path(file_uuid)
+
+            with open(temp_path, "r+b") as f:
+                f.seek(start)
+                f.write(chunk_data)
+
+            # Update session chunk tracking
+            chunk_map = session.chunk_map or {}
+            chunk_map[str(chunk_index)] = True
+
+            # Calculate received bytes more accurately
+            received_bytes = sum(
+                min(session.chunk_size, session.file_size - int(k) * session.chunk_size)
+                for k in chunk_map.keys()
+            )
+
+            uploaded_chunks = len(chunk_map)
+
+            # Update session
+            await self.upload_session_repo.update_chunk_map(
+                session_id, chunk_index, received_bytes, uploaded_chunks
+            )
+
+            # Refresh session for current status
+            session = await self.upload_session_repo.get_by_id(session_id)
+            progress_percent = (received_bytes / session.file_size) * 100
+
+            # Check if all chunks received
+            if uploaded_chunks >= session.total_chunks:
+                await self._assemble_and_finalize(session)
+                progress_percent = 100.0
+
+            return ChunkUploadResponse(
+                session_id=session_id,
+                status=session.status,
+                received_bytes=received_bytes,
+                uploaded_chunks=uploaded_chunks,
+                total_chunks=session.total_chunks,
+                progress_percent=progress_percent,
+            )
+
+        except AppException:
+            raise
+        except Exception as e:
+            self.log_error(e, "upload_chunk")
+            raise AppException(status_code=400, message=f"Failed to upload chunk: {str(e)}")
+
+    async def get_upload_session_status(self, session_id: UUID) -> UploadSessionStatusResponse:
+        """Get current session status for resume capability"""
+        try:
+            session = await self.upload_session_repo.get_by_id(session_id)
+            if not session:
+                raise AppException(status_code=404, message="Upload session not found")
+
+            # Check expiry
+            if datetime.utcnow() > session.expires_at:
+                await self.upload_session_repo.mark_expired(session_id)
+                session = await self.upload_session_repo.get_by_id(session_id)
+
+            chunk_map = session.chunk_map or {}
+            received_bytes = sum(
+                min(session.chunk_size, session.file_size - int(k) * session.chunk_size)
+                for k in chunk_map.keys()
+            )
+            progress_percent = (received_bytes / session.file_size) * 100
+
+            return UploadSessionStatusResponse(
+                session_id=session.id,
+                status=session.status,
+                file_name=session.file_name,
+                file_size=session.file_size,
+                received_bytes=received_bytes,
+                uploaded_chunks=len(chunk_map),
+                total_chunks=session.total_chunks,
+                chunk_size=session.chunk_size,
+                chunk_map=chunk_map,
+                progress_percent=progress_percent,
+                file_registry_id=session.file_registry_id,
+                expires_at=session.expires_at,
+            )
+
+        except AppException:
+            raise
+        except Exception as e:
+            self.log_error(e, "get_upload_session_status")
+            raise AppException(status_code=400, message=f"Failed to get session status: {str(e)}")
+
+    async def _assemble_and_finalize(self, session: UploadSession) -> None:
+        """Assemble chunks and create FileRegistry after upload completes"""
+        try:
+            base_path = Path(settings.storage_settings.local_storage_path)
+
+            # Move temp file to uploads directory
+            file_uuid = session.file_path.split(".")[0]
+            temp_path = self._get_chunk_path(file_uuid)
+            final_dir = base_path / "uploads"
+            final_dir.mkdir(parents=True, exist_ok=True)
+            final_path = final_dir / session.file_path
+
+            shutil.move(str(temp_path), str(final_path))
+
+            # Create FileRegistry record
+            file_registry = FileRegistry(
+                file_name=session.file_name,
+                file_path=str(final_path),  # Store relative path
+                file_type=session.file_type,
+                file_size=session.file_size,
+                source_system=session.source_system,
+                batch_id=session.batch_id,
+                processing_status=ProcessingStatus.PENDING.value,
+                created_by=session.created_by,
+                file_metadata=session.file_metadata or {},
+            )
+            self.db.add(file_registry)
+            self.db.flush()
+
+            # Update session
+            await self.upload_session_repo.mark_completed(session.id, file_registry.id)
+
+        except Exception as e:
+            self.log_error(e, "_assemble_and_finalize")
+            raise AppException(status_code=500, message=f"Failed to finalize upload: {str(e)}")
+
+    def _parse_content_range(self, content_range: str) -> Tuple[int, int, int]:
+        """Parse Content-Range header
+        Format: bytes {start}-{end}/{total}
+        Example: bytes 0-1023/10240
+        """
+        try:
+            range_part = content_range.split(" ")[1]
+            start_end, total = range_part.split("/")
+            start, end = start_end.split("-")
+            return int(start), int(end), int(total)
+        except Exception:
+            raise AppException(
+                status_code=400,
+                message="Invalid Content-Range header format",
+            )
+
+    def _get_chunk_path(self, file_uuid: str) -> Path:
+        """Get path to temp chunk file"""
+        base = Path(settings.storage_settings.local_storage_path)
+        return base / "chunks" / f"{file_uuid}.part"
