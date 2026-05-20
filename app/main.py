@@ -17,6 +17,7 @@ from app.infrastructure.messaging import messaging_manager, Message
 from app.infrastructure.messaging.decorators import message_handler, publish_event
 from app.infrastructure.messaging.manager import MessagingType
 from app.interfaces.http.middleware.logging import LoggingMiddleware
+from app.interfaces.http.middleware.rate_limit import RateLimitMiddleware, RateLimitConfig
 from app.interfaces.http.routes import api_router as app_routes
 import uvicorn
 
@@ -135,6 +136,7 @@ def create_application() -> FastAPI:
         )
 
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(RateLimitMiddleware, config=RateLimitConfig())
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
