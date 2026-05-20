@@ -52,7 +52,7 @@ class EntityService(BaseService):
             self.db.refresh(entity)
             
             return {
-                "entity_id": entity.entity_id,
+                "entity_id": entity.id,
                 "entity_type": entity.entity_type,
                 "entity_key": entity.entity_key,
                 "version": entity.version,
@@ -73,7 +73,7 @@ class EntityService(BaseService):
                 return None
             
             return {
-                "entity_id": entity.entity_id,
+                "entity_id": entity.id,
                 "entity_type": entity.entity_type,
                 "entity_key": entity.entity_key,
                 "entity_data": entity.entity_data,
@@ -103,7 +103,7 @@ class EntityService(BaseService):
                 return None
             
             return {
-                "entity_id": entity.entity_id,
+                "entity_id": entity.id,
                 "entity_type": entity.entity_type,
                 "entity_key": entity.entity_key,
                 "entity_data": entity.entity_data,
@@ -141,7 +141,7 @@ class EntityService(BaseService):
             self.db.commit()
             
             return {
-                "entity_id": entity.entity_id,
+                "entity_id": entity.id,
                 "entity_type": entity.entity_type,
                 "entity_key": entity.entity_key,
                 "version": entity.version,
@@ -195,27 +195,31 @@ class EntityService(BaseService):
             })
             
             stmt = select(Entity)
-            
+
             if entity_type:
                 stmt = stmt.where(Entity.entity_type == entity_type)
             if is_active is not None:
                 stmt = stmt.where(Entity.is_active == is_active)
-            
-            # Count total
-            count_stmt = select(func.count(Entity.entity_id)).select_from(stmt.alias())
-            total = self.db_session.execute(count_stmt).scalar()
-            
+
+            # Count total - rebuild count statement with same filters
+            count_stmt = select(func.count()).select_from(Entity)
+            if entity_type:
+                count_stmt = count_stmt.where(Entity.entity_type == entity_type)
+            if is_active is not None:
+                count_stmt = count_stmt.where(Entity.is_active == is_active)
+            total = self.db.execute(count_stmt).scalar()
+
             # Get data with pagination
             stmt = stmt.order_by(Entity.last_updated.desc()).limit(limit).offset(offset)
-            entities = self.db_session.execute(stmt).scalars().all()
+            entities = self.db.execute(stmt).scalars().all()
             
             return {
                 "entities": [{
-                    "entity_id": entity.entity_id,
+                    "entity_id": str(entity.id),
                     "entity_type": entity.entity_type,
                     "entity_key": entity.entity_key,
                     "entity_data": entity.entity_data,
-                    "confidence_score": entity.confidence_score,
+                    "confidence_score": float(entity.confidence_score),
                     "version": entity.version,
                     "is_active": entity.is_active,
                     "last_updated": entity.last_updated
@@ -243,8 +247,8 @@ class EntityService(BaseService):
             })
             
             # Validate entities exist
-            entity_from = self.db_session.get(Entity, relationship_data["entity_from"])
-            entity_to = self.db_session.get(Entity, relationship_data["entity_to"])
+            entity_from = self.db.get(Entity, relationship_data["entity_from"])
+            entity_to = self.db.get(Entity, relationship_data["entity_to"])
             
             if not entity_from or not entity_to:
                 raise EntityError("One or both entities not found")
@@ -257,9 +261,9 @@ class EntityService(BaseService):
                 metadata=relationship_data.get("metadata", {})
             )
             
-            self.db_session.add(relationship)
-            self.db_session.commit()
-            self.db_session.refresh(relationship)
+            self.db.add(relationship)
+            self.db.commit()
+            self.db.refresh(relationship)
             
             return {
                 "relationship_id": relationship.relationship_id,
@@ -270,7 +274,7 @@ class EntityService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "create_relationship")
     
     async def get_entity_relationships(self, entity_id: int, relationship_type: str = None) -> List[Dict[str, Any]]:
@@ -286,13 +290,13 @@ class EntityService(BaseService):
             if relationship_type:
                 stmt = stmt.where(EntityRelationship.relationship_type == relationship_type)
             
-            relationships = self.db_session.execute(stmt).scalars().all()
+            relationships = self.db.execute(stmt).scalars().all()
             
             result = []
             for rel in relationships:
                 # Get related entity info
                 related_entity_id = rel.entity_to if rel.entity_from == entity_id else rel.entity_from
-                related_entity = self.db_session.get(Entity, related_entity_id)
+                related_entity = self.db.get(Entity, related_entity_id)
                 
                 result.append({
                     "relationship_id": rel.relationship_id,
@@ -300,7 +304,7 @@ class EntityService(BaseService):
                     "relationship_strength": rel.relationship_strength,
                     "direction": "outgoing" if rel.entity_from == entity_id else "incoming",
                     "related_entity": {
-                        "entity_id": related_entity.entity_id,
+                        "entity_id": related_entity.id,
                         "entity_type": related_entity.entity_type,
                         "entity_key": related_entity.entity_key
                     } if related_entity else None,
@@ -330,10 +334,10 @@ class EntityService(BaseService):
             )
             stmt = stmt.where(search_condition)
             
-            entities = self.db_session.execute(stmt).scalars().all()
+            entities = self.db.execute(stmt).scalars().all()
             
             return [{
-                "entity_id": entity.entity_id,
+                "entity_id": entity.id,
                 "entity_type": entity.entity_type,
                 "entity_key": entity.entity_key,
                 "entity_data": entity.entity_data,
@@ -351,10 +355,10 @@ class EntityService(BaseService):
             
             stmt = select(
                 Entity.entity_type,
-                func.count(Entity.entity_id).label('count')
+                func.count(Entity.id).label('count')
             ).where(Entity.is_active == True).group_by(Entity.entity_type)
             
-            result = self.db_session.execute(stmt).all()
+            result = self.db.execute(stmt).all()
             
             return [{
                 "entity_type": row.entity_type,
@@ -396,7 +400,7 @@ class EntityService(BaseService):
                 "confidence": confidence_score
             })
 
-            entity = self.db_session.get(Entity, entity_id)
+            entity = self.db.get(Entity, entity_id)
             if not entity:
                 raise EntityError(f"Entity {entity_id} not found")
 
@@ -483,7 +487,7 @@ class EntityService(BaseService):
 
             self.log_operation("update_entity_with_lineage", {"entity_id": entity_id})
 
-            entity = self.db_session.get(Entity, entity_id)
+            entity = self.db.get(Entity, entity_id)
             if not entity:
                 raise EntityError(f"Entity {entity_id} not found")
 
@@ -499,7 +503,7 @@ class EntityService(BaseService):
                 new_value=merged_data,
                 change_details={"reason": change_reason}
             )
-            self.db_session.add(change_log)
+            self.db.add(change_log)
 
             # Create lineage
             lineage = DataLineage(
@@ -510,14 +514,14 @@ class EntityService(BaseService):
                 job_execution_id=job_execution_id,
                 lineage_metadata={"reason": change_reason}
             )
-            self.db_session.add(lineage)
+            self.db.add(lineage)
 
             # Update entity
             entity.entity_data = merged_data
             entity.version += 1
             entity.last_updated = get_current_timestamp()
-            self.db_session.add(entity)
-            self.db_session.commit()
+            self.db.add(entity)
+            self.db.commit()
 
             return {
                 "entity_id": entity_id,
@@ -526,7 +530,7 @@ class EntityService(BaseService):
             }
 
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "update_entity_with_lineage")
 
     async def mark_as_duplicate(
@@ -556,8 +560,8 @@ class EntityService(BaseService):
                 "master_id": master_entity_id
             })
 
-            duplicate = self.db_session.get(Entity, duplicate_entity_id)
-            master = self.db_session.get(Entity, master_entity_id)
+            duplicate = self.db.get(Entity, duplicate_entity_id)
+            master = self.db.get(Entity, master_entity_id)
 
             if not duplicate or not master:
                 raise EntityError("One or both entities not found")
@@ -566,7 +570,7 @@ class EntityService(BaseService):
             master.duplicate_count = (master.duplicate_count or 0) + 1
             if not master.master_entity_id:
                 master.master_entity_id = master_entity_id
-            self.db_session.add(master)
+            self.db.add(master)
 
             # Create duplicate_of relationship
             relationship = EntityRelationship(
@@ -576,8 +580,8 @@ class EntityService(BaseService):
                 relationship_strength=float(match_score),
                 metadata=match_metadata or {}
             )
-            self.db_session.add(relationship)
-            self.db_session.commit()
+            self.db.add(relationship)
+            self.db.commit()
 
             return {
                 "duplicate_entity_id": duplicate_entity_id,
@@ -586,7 +590,7 @@ class EntityService(BaseService):
             }
 
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "mark_as_duplicate")
 
     # Private helper methods
@@ -596,7 +600,7 @@ class EntityService(BaseService):
             EntityRelationship.entity_from == entity_id,
             EntityRelationship.entity_to == entity_id
         ))
-        relationships = self.db_session.execute(stmt).scalars().all()
+        relationships = self.db.execute(stmt).scalars().all()
 
         for rel in relationships:
-            self.db_session.delete(rel)
+            self.db.delete(rel)
