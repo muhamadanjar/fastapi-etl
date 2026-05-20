@@ -412,12 +412,26 @@ def sanitize_filename(filename: str) -> str:
 def rate_limit_key(identifier: str, endpoint: str) -> str:
     """
     Generate a rate limit key for Redis.
-    
+
     Args:
         identifier: User identifier (IP, user ID, etc.)
         endpoint: API endpoint
-        
+
     Returns:
         Rate limit key
     """
     return f"rate_limit:{identifier}:{endpoint}"
+
+
+# Password hashing convenience functions
+_password_policy = PasswordPolicy()
+
+
+def get_password_hash(password: str) -> str:
+    """Hash password using PasswordPolicy."""
+    return _password_policy.get_password_hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against hash using PasswordPolicy."""
+    return _password_policy.verify_password(plain_password, hashed_password)

@@ -632,6 +632,115 @@ class LocalFileStorage:
             logger.error(f"Failed to set metadata for {file_path}: {e}")
             raise FileStorageError(f"Metadata save failed: {e}")
 
+    def write_chunk(
+        self,
+        session_id: str,
+        chunk_data: bytes,
+        start_offset: int,
+    ) -> Path:
+        """
+        Write chunk data to temporary chunk file.
+
+        Args:
+            session_id: Upload session ID
+            chunk_data: Chunk data bytes
+            start_offset: Byte offset in final file
+
+        Returns:
+            Path to chunk temp file
+        """
+        try:
+            chunks_dir = self.base_path / "chunks" / session_id
+            chunks_dir.mkdir(parents=True, exist_ok=True)
+
+            chunk_file = chunks_dir / f"chunk_{start_offset}"
+            with open(chunk_file, "wb") as f:
+                f.write(chunk_data)
+
+            logger.debug(f"Wrote chunk to {chunk_file}")
+            return chunk_file
+        except Exception as e:
+            logger.error(f"Failed to write chunk: {e}")
+            raise FileStorageError(f"Chunk write failed: {e}")
+
+    def assemble_chunks(
+        self,
+        session_id: str,
+        output_filename: str,
+        subfolder: Optional[str] = None,
+    ) -> FileInfo:
+        """
+        Assemble all chunks into final file.
+
+        Args:
+            session_id: Upload session ID
+            output_filename: Final filename
+            subfolder: Subfolder for output file
+
+        Returns:
+            FileInfo for assembled file
+        """
+        try:
+            chunks_dir = self.base_path / "chunks" / session_id
+            if not chunks_dir.exists():
+                raise FileStorageError(f"Chunks directory not found: {chunks_dir}")
+
+            # Get all chunk files and sort by offset
+            chunk_files = sorted(chunks_dir.glob("chunk_*"), key=lambda x: int(x.name.split("_")[1]))
+
+            # Assemble chunks
+            assembled_data = b""
+            for chunk_file in chunk_files:
+                with open(chunk_file, "rb") as f:
+                    assembled_data += f.read()
+
+            # Save assembled file to uploads folder
+            output_dir = self.base_path / "uploads"
+            if subfolder:
+                output_dir = output_dir / self._sanitize_path(subfolder)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            final_path = output_dir / self._sanitize_filename(output_filename)
+            with open(final_path, "wb") as f:
+                f.write(assembled_data)
+
+            # Calculate metadata
+            md5_hash = hashlib.md5(assembled_data).hexdigest()
+            stat = final_path.stat()
+
+            file_info = FileInfo(
+                filename=output_filename,
+                file_path=str(final_path),
+                size=stat.st_size,
+                content_type=mimetypes.guess_type(output_filename)[0] or "application/octet-stream",
+                created_at=datetime.fromtimestamp(stat.st_ctime),
+                modified_at=datetime.fromtimestamp(stat.st_mtime),
+                md5_hash=md5_hash,
+            )
+
+            logger.info(f"Assembled chunks into {final_path}")
+            return file_info
+        except FileStorageError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to assemble chunks: {e}")
+            raise FileStorageError(f"Chunk assembly failed: {e}")
+
+    def cleanup_chunks(self, session_id: str) -> None:
+        """
+        Clean up chunk files for a session.
+
+        Args:
+            session_id: Upload session ID
+        """
+        try:
+            chunks_dir = self.base_path / "chunks" / session_id
+            if chunks_dir.exists():
+                shutil.rmtree(chunks_dir)
+                logger.info(f"Cleaned up chunks for session {session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup chunks for session {session_id}: {e}")
+
 
 # Utility functions for file operations
 def ensure_directory(directory: Union[str, Path]) -> Path:

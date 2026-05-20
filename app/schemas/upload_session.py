@@ -1,17 +1,34 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+from app.core.enums import FileTypeEnum
+
+
+_FILE_TYPE_MAP = {
+    "csv": "CSV",
+    "xlsx": "EXCEL",
+    "xls": "EXCEL",
+    "json": "JSON",
+    "xml": "XML",
+    "api": "API",
+}
 
 
 class InitUploadSessionRequest(BaseModel):
     """Request to initiate chunked upload session"""
     file_name: str = Field(..., description="Original file name with extension")
     file_size: int = Field(..., ge=1, description="Total file size in bytes")
-    file_type: str = Field(..., description="File type/extension (csv, xlsx, json, xml)")
+    file_type: FileTypeEnum = Field(..., description="File type: CSV, EXCEL, JSON, XML, API")
     source_system: str = Field(..., description="Source system identifier")
     batch_id: Optional[str] = Field(None, description="Batch ID for grouping files")
     metadata: Optional[str] = Field(None, description="Additional metadata as JSON string")
+
+    @validator('file_type', pre=True)
+    def normalize_file_type(cls, v):
+        """Normalize file_type input: 'csv' → 'CSV', 'xlsx' → 'EXCEL', etc."""
+        normalized = _FILE_TYPE_MAP.get(str(v).lower().strip(), str(v).upper().strip())
+        return normalized
 
 
 class InitUploadSessionResponse(BaseModel):

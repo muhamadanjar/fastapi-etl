@@ -2,6 +2,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import Session, select
+from sqlalchemy import update as sa_update
 from app.infrastructure.db.models.raw_data.upload_session import UploadSession, UploadSessionStatus
 from app.infrastructure.db.repositories.base import BaseRepository
 
@@ -24,18 +25,26 @@ class UploadSessionRepository(BaseRepository[UploadSession]):
         if not session:
             return None
 
-        chunk_map = session.chunk_map or {}
+        chunk_map = dict(session.chunk_map or {})
         chunk_map[str(chunk_index)] = True
 
-        session.chunk_map = chunk_map
-        session.received_bytes = received_bytes
-        session.uploaded_chunks = uploaded_chunks
-
-        # Mark as uploading if not already
+        new_status = session.status
         if session.status == UploadSessionStatus.PENDING:
-            session.status = UploadSessionStatus.UPLOADING
+            new_status = UploadSessionStatus.UPLOADING
 
-        return await self.update(session_id, session)
+        stmt = sa_update(UploadSession).where(
+            UploadSession.id == session_id
+        ).values(
+            chunk_map=chunk_map,
+            received_bytes=received_bytes,
+            uploaded_chunks=uploaded_chunks,
+            status=new_status
+        )
+
+        self.session.execute(stmt)
+        self.session.flush()
+
+        return await self.get(session_id)
 
     async def mark_completed(self, session_id: UUID, file_registry_id: UUID) -> Optional[UploadSession]:
         """Mark session as completed and link to FileRegistry"""
@@ -46,7 +55,7 @@ class UploadSessionRepository(BaseRepository[UploadSession]):
         session.status = UploadSessionStatus.COMPLETED
         session.file_registry_id = file_registry_id
 
-        return await self.update(session_id, session)
+        return await self.update(id=session_id, obj_in=session)
 
     async def mark_expired(self, session_id: UUID) -> Optional[UploadSession]:
         """Mark session as expired"""
@@ -55,7 +64,7 @@ class UploadSessionRepository(BaseRepository[UploadSession]):
             return None
 
         session.status = UploadSessionStatus.EXPIRED
-        return await self.update(session_id, session)
+        return await self.update(id=session_id, obj_in=session)
 
     async def get_expired_sessions(self) -> List[UploadSession]:
         """Get all expired sessions"""

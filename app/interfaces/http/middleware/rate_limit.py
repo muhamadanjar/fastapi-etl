@@ -23,19 +23,26 @@ class RateLimitConfig:
         self.default_limit = 100  # 100 req/min globally
         self.default_window = 60  # 1 minute
 
-        # Endpoint-specific limits
+        # Endpoint-specific limits (order matters - check specific patterns first)
         self.limits = {
-            "/upload": {"limit": 20, "window": 60},  # 20 uploads/min
+            "/upload/session": {"limit": 100, "window": 60},  # Session init/status: high (metadata ops)
             "/batch-upload": {"limit": 5, "window": 60},  # 5 batch uploads/min
+            "/upload": {"limit": 30, "window": 60},  # Chunk uploads: 30/min
             "/process": {"limit": 30, "window": 60},  # 30 process/min
             "/download": {"limit": 50, "window": 60},  # 50 downloads/min
             "default": {"limit": self.default_limit, "window": self.default_window},
         }
 
     def get_limit(self, path: str) -> tuple:
-        """Get limit and window for path."""
-        for pattern, config in self.limits.items():
-            if pattern != "default" and pattern in path:
+        """Get limit and window for path. Check longer/specific patterns first."""
+        # Sort patterns by length (descending) to match specific paths before general ones
+        patterns = sorted(
+            [(p, c) for p, c in self.limits.items() if p != "default"],
+            key=lambda x: len(x[0]),
+            reverse=True
+        )
+        for pattern, config in patterns:
+            if pattern in path:
                 return config["limit"], config["window"]
         return self.limits["default"]["limit"], self.limits["default"]["window"]
 
@@ -59,12 +66,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Get limit config
-        limit, window = self.config.get_limit(request.url.path)
+        try:
+            limit, window = self.config.get_limit(request.url.path)
+        except Exception as e:
+            logger.error(f"Rate limit config error: {str(e)}", exc_info=True)
+            return await call_next(request)
 
         # Check rate limit
-        is_limited, remaining = await self._check_rate_limit(
-            rate_limit_key, limit, window
-        )
+        try:
+            is_limited, remaining = await self._check_rate_limit(
+                rate_limit_key, limit, window
+            )
+        except Exception as e:
+            logger.error(f"Rate limit check error: {str(e)}", exc_info=True)
+            is_limited = False
+            remaining = limit
 
         if is_limited:
             logger.warning(

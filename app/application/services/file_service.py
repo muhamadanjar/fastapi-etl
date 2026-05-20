@@ -37,6 +37,7 @@ from app.core.enums import ProcessingStatus, FileTypeEnum
 from app.core.config import settings
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
 from app.utils.date_utils import get_current_timestamp
+from app.infrastructure.storage.local_storage import LocalFileStorage
 # Processor imports are deferred inside _get_processor() to break the circular
 # import cycle: processors.__init__ → base_processor → application.services →
 # file_service → processors.{csv,excel,json,xml}_processor → base_processor
@@ -53,6 +54,7 @@ class FileService(BaseService):
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.repo = FileRegistryRepository(db)
         self.upload_session_repo = UploadSessionRepository(db)
+        self.storage = LocalFileStorage(base_path="storage")
     
     def get_service_name(self) -> str:
         return "FileService"
@@ -640,16 +642,16 @@ class FileService(BaseService):
             )
 
         except Exception as e:
-            self.log_error(e, "init_upload_session")
+            self.logger.error(f"Error in init_upload_session: {str(e)}")
             raise AppException(status_code=400, message=f"Failed to initialize upload session: {str(e)}")
 
     async def upload_chunk(
-        self, session_id: UUID, content_range: str, chunk_data: bytes
+        self, session_id: UUID, chunk_index: int, chunk_data: bytes
     ) -> ChunkUploadResponse:
-        """Upload a single chunk with Content-Range header"""
+        """Upload a single chunk by index. Backend calculates position from chunk_index * chunk_size."""
         try:
             # Get session
-            session = await self.upload_session_repo.get_by_id(session_id)
+            session = await self.upload_session_repo.get(session_id)
             if not session:
                 raise AppException(status_code=404, message="Upload session not found")
 
@@ -669,38 +671,33 @@ class FileService(BaseService):
                     message=f"Cannot upload to session with status: {session.status}",
                 )
 
-            # Parse Content-Range header
-            start, end, total = self._parse_content_range(content_range)
-
-            # Validate range
-            if total != session.file_size:
+            # Validate chunk index
+            if chunk_index < 0 or chunk_index >= session.total_chunks:
                 raise AppException(
                     status_code=400,
-                    message=f"File size mismatch: expected {session.file_size}, got {total}",
+                    message=f"Invalid chunk index: {chunk_index} (expected 0-{session.total_chunks - 1})",
                 )
 
-            if end > session.file_size:
+            # Calculate byte positions from chunk_index
+            start = chunk_index * session.chunk_size
+            end = min(start + session.chunk_size, session.file_size)
+            chunk_size_actual = end - start
+
+            # Validate chunk data size
+            if len(chunk_data) != chunk_size_actual:
                 raise AppException(
-                    status_code=416,
-                    message="Range exceeds file size",
+                    status_code=400,
+                    message=f"Chunk size mismatch: expected {chunk_size_actual} bytes, got {len(chunk_data)}",
                 )
 
-            # Calculate chunk index
-            chunk_index = start // session.chunk_size
-
-            # Write chunk to temp file
-            file_uuid = session.file_path.split(".")[0]
-            temp_path = self._get_chunk_path(file_uuid)
-
-            with open(temp_path, "r+b") as f:
-                f.seek(start)
-                f.write(chunk_data)
+            # Write chunk to storage
+            self.storage.write_chunk(str(session_id), chunk_data, start)
 
             # Update session chunk tracking
             chunk_map = session.chunk_map or {}
             chunk_map[str(chunk_index)] = True
 
-            # Calculate received bytes more accurately
+            # Calculate received bytes
             received_bytes = sum(
                 min(session.chunk_size, session.file_size - int(k) * session.chunk_size)
                 for k in chunk_map.keys()
@@ -713,18 +710,21 @@ class FileService(BaseService):
                 session_id, chunk_index, received_bytes, uploaded_chunks
             )
 
-            # Refresh session for current status
-            session = await self.upload_session_repo.get_by_id(session_id)
+            # Use locally-computed values for progress
             progress_percent = (received_bytes / session.file_size) * 100
+            status = session.status
 
             # Check if all chunks received
             if uploaded_chunks >= session.total_chunks:
+                # Refresh to get latest state for assembly
+                session = await self.upload_session_repo.get(session_id)
                 await self._assemble_and_finalize(session)
                 progress_percent = 100.0
+                status = session.status
 
             return ChunkUploadResponse(
                 session_id=session_id,
-                status=session.status,
+                status=status,
                 received_bytes=received_bytes,
                 uploaded_chunks=uploaded_chunks,
                 total_chunks=session.total_chunks,
@@ -734,20 +734,20 @@ class FileService(BaseService):
         except AppException:
             raise
         except Exception as e:
-            self.log_error(e, "upload_chunk")
+            self.logger.error(f"Error in upload_chunk: {str(e)}")
             raise AppException(status_code=400, message=f"Failed to upload chunk: {str(e)}")
 
     async def get_upload_session_status(self, session_id: UUID) -> UploadSessionStatusResponse:
         """Get current session status for resume capability"""
         try:
-            session = await self.upload_session_repo.get_by_id(session_id)
+            session = await self.upload_session_repo.get(session_id)
             if not session:
                 raise AppException(status_code=404, message="Upload session not found")
 
             # Check expiry
             if datetime.utcnow() > session.expires_at:
                 await self.upload_session_repo.mark_expired(session_id)
-                session = await self.upload_session_repo.get_by_id(session_id)
+                session = await self.upload_session_repo.get(session_id)
 
             chunk_map = session.chunk_map or {}
             received_bytes = sum(
@@ -774,62 +774,52 @@ class FileService(BaseService):
         except AppException:
             raise
         except Exception as e:
-            self.log_error(e, "get_upload_session_status")
+            self.logger.error(f"Error in get_upload_session_status: {str(e)}")
             raise AppException(status_code=400, message=f"Failed to get session status: {str(e)}")
 
     async def _assemble_and_finalize(self, session: UploadSession) -> None:
         """Assemble chunks and create FileRegistry after upload completes"""
+        file_registry = None
+
         try:
-            base_path = Path(settings.storage_settings.local_storage_path)
-
-            # Move temp file to uploads directory
-            file_uuid = session.file_path.split(".")[0]
-            temp_path = self._get_chunk_path(file_uuid)
-            final_dir = base_path / "uploads"
-            final_dir.mkdir(parents=True, exist_ok=True)
-            final_path = final_dir / session.file_path
-
-            shutil.move(str(temp_path), str(final_path))
-
-            # Create FileRegistry record
-            file_registry = FileRegistry(
-                file_name=session.file_name,
-                file_path=str(final_path),  # Store relative path
-                file_type=session.file_type,
-                file_size=session.file_size,
-                source_system=session.source_system,
-                batch_id=session.batch_id,
-                processing_status=ProcessingStatus.PENDING.value,
-                created_by=session.created_by,
-                file_metadata=session.file_metadata or {},
+            # Assemble chunks into final file
+            file_info = self.storage.assemble_chunks(
+                session_id=str(session.id),
+                output_filename=session.file_name,
+                subfolder=None,
             )
-            self.db.add(file_registry)
-            self.db.flush()
 
-            # Update session
-            await self.upload_session_repo.mark_completed(session.id, file_registry.id)
+            # Create FileRegistry
+            file_registry_data = {
+                "file_name": session.file_name,
+                "file_path": file_info.file_path,
+                "file_type": session.file_type,
+                "file_size": file_info.size,
+                "source_system": session.source_system,
+                "batch_id": session.batch_id,
+                "created_by": session.created_by,
+                "file_metadata": session.file_metadata or {},
+            }
+            self.logger.info(f"Creating FileRegistry with data: {file_registry_data}")
+            file_registry = await self.repo.create(file_registry_data)
+            self.db.commit()
+            self.logger.info(f"FileRegistry committed with ID: {file_registry.id}")
+
+            # Clean up chunks
+            self.storage.cleanup_chunks(str(session.id))
 
         except Exception as e:
-            self.log_error(e, "_assemble_and_finalize")
-            raise AppException(status_code=500, message=f"Failed to finalize upload: {str(e)}")
+            self.logger.error(f"Error in assembly/finalize: {str(e)}", exc_info=True)
+            raise AppException(status_code=500, message=f"Failed to assemble and finalize: {str(e)}")
 
-    def _parse_content_range(self, content_range: str) -> Tuple[int, int, int]:
-        """Parse Content-Range header
-        Format: bytes {start}-{end}/{total}
-        Example: bytes 0-1023/10240
-        """
+        # Update session status — MUST succeed (FileRegistry already committed, session tracking required)
+        if not file_registry:
+            raise AppException(status_code=500, message="FileRegistry creation failed: file_registry is None")
+
         try:
-            range_part = content_range.split(" ")[1]
-            start_end, total = range_part.split("/")
-            start, end = start_end.split("-")
-            return int(start), int(end), int(total)
-        except Exception:
-            raise AppException(
-                status_code=400,
-                message="Invalid Content-Range header format",
-            )
-
-    def _get_chunk_path(self, file_uuid: str) -> Path:
-        """Get path to temp chunk file"""
-        base = Path(settings.storage_settings.local_storage_path)
-        return base / "chunks" / f"{file_uuid}.part"
+            await self.upload_session_repo.mark_completed(session.id, file_registry.id)
+            self.db.commit()
+            self.logger.info(f"Session {session.id} marked as completed with file_registry_id: {file_registry.id}")
+        except Exception as e:
+            self.logger.error(f"Error marking session completed: {str(e)}", exc_info=True)
+            raise AppException(status_code=500, message=f"Failed to update session status: {str(e)}")

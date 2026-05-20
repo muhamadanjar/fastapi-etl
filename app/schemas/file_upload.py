@@ -31,7 +31,7 @@ class FileUploadResponse(BaseResponse):
     file_name: str
     file_type: FileTypeEnum
     file_size: int
-    batch_id: str
+    batch_id: Optional[str] = None
     processing_status: ProcessingStatus
     upload_date: datetime
 
@@ -62,7 +62,7 @@ class FileMetadata(BaseModel):
     source_system: Optional[str] = None
     upload_date: datetime
     processing_status: ProcessingStatus
-    batch_id: str
+    batch_id: Optional[str] = None
     created_by: UUID
     metadata: Optional[Dict[str, Any]] = None
 

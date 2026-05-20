@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query, Request, Header
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query, Request, Header, Path
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 
@@ -64,18 +64,18 @@ async def upload_file(
         user_id=current_user.id
     )
 
-@router.patch("/upload", response_model=ChunkUploadResponse)
+@router.post("/upload/{session_id}/{chunk_index}", response_model=ChunkUploadResponse)
 async def chunk_upload(
-    session_id: UUID = Query(..., description="Upload session ID"),
-    content_range: str = Header(..., description="Content-Range header: bytes start-end/total"),
+    session_id: UUID = Path(..., description="Upload session ID"),
+    chunk_index: int = Path(..., ge=0, description="Chunk index (0-based)"),
     request: Request = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency),
 ) -> ChunkUploadResponse:
-    """Upload a single chunk with Content-Range header"""
+    """Upload a single chunk by index. Backend calculates position from chunk_index."""
     chunk_data = await request.body()
     service = FileService(db)
-    return await service.upload_chunk(session_id, content_range, chunk_data)
+    return await service.upload_chunk(session_id, chunk_index, chunk_data)
 
 
 @router.get("/upload/session/{session_id}", response_model=UploadSessionStatusResponse)

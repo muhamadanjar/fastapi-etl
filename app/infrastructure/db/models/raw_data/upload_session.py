@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import JSON, String
 from app.infrastructure.db.models.base import BaseModelWithTimestamp
+from app.core.enums import FileTypeEnum
 
 
 class UploadSessionStatus(str, Enum):
@@ -26,7 +27,7 @@ class UploadSession(BaseModelWithTimestamp, table=True):
     file_name: str = Field(max_length=255)
     file_path: str = Field(max_length=500)   # HANYA "{uuid}.{ext}" — tanpa base path
     file_size: int                            # total bytes expected
-    file_type: str = Field(max_length=50)    # CSV, EXCEL, JSON, XML
+    file_type: FileTypeEnum                   # CSV, EXCEL, JSON, XML, API
 
     # Chunk tracking
     chunk_size: int                           # bytes per chunk (from config)
