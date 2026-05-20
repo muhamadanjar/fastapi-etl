@@ -20,6 +20,7 @@ from app.infrastructure.db.repositories.file_repository import FileRegistryRepos
 from app.infrastructure.db.repositories.upload_session_repository import UploadSessionRepository
 from app.schemas.base import PaginatedMetaDataResponse
 from app.application.services.base import BaseService
+from app.application.services.user_service import UserService
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
@@ -57,23 +58,33 @@ class FileService(BaseService):
         return "FileService"
     
     async def upload_file(
-        self, 
-        file: UploadFile, 
-        source_system: str, 
+        self,
+        file: UploadFile,
+        source_system: str,
         batch_id: Optional[str] = None,
         metadata: Optional[str] = None,
         user_id: UUID = None
     ) -> FileUploadResponse:
         """Upload file dan simpan metadata."""
         try:
-            self.log_operation("upload_file", {"filename": file.filename, "source_system": source_system})
-            
+            self.log_operation("upload_file", {"filename": file.filename, "source_system": source_system, "user_id": user_id})
+
+            # Validate user exists from cache/remote (non-blocking)
+            # User already validated in endpoint via get_current_user
+            if user_id:
+                try:
+                    user_exists = await UserService.validate_user_exists_remote(user_id)
+                    if not user_exists:
+                        self.logger.warning(f"User {user_id} not found in usermanagement API")
+                except Exception as e:
+                    self.logger.debug(f"User validation skipped: {str(e)}")
+                    # Continue anyway - user was validated at endpoint level
+
             # Validate file
             if not file.filename:
                 raise FileError("Filename is required")
             
             file_type = get_file_type(file.content_type)
-            print(f"Detected file type: {file_type}")
             if not file_type:
                 raise FileError(f"File type {file.content_type} not supported")
             
@@ -296,9 +307,18 @@ class FileService(BaseService):
         """Start processing file secara asynchronous."""
         try:
             from app.tasks.etl_tasks import process_file_task
-            
+
             self.log_operation("start_file_processing", {"file_id": file_id, "user_id": user_id})
-            
+
+            # Validate user exists from cache/remote (non-blocking, for audit/logging)
+            if user_id:
+                try:
+                    user_exists = await UserService.validate_user_exists_remote(UUID(user_id))
+                    if not user_exists:
+                        self.logger.warning(f"User {user_id} not found in usermanagement API during file processing")
+                except Exception as e:
+                    self.logger.debug(f"User validation skipped: {str(e)}")
+
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
@@ -415,10 +435,20 @@ class FileService(BaseService):
         """Upload multiple files dalam satu batch."""
         try:
             self.log_operation("batch_upload", {
-                "files_count": len(files), 
+                "files_count": len(files),
                 "source_system": source_system,
-                "batch_id": batch_id
+                "batch_id": batch_id,
+                "user_id": user_id
             })
+
+            # Validate user exists from cache/remote (non-blocking, for audit)
+            if user_id:
+                try:
+                    user_exists = await UserService.validate_user_exists_remote(user_id)
+                    if not user_exists:
+                        self.logger.warning(f"User {user_id} not found in usermanagement API during batch upload")
+                except Exception as e:
+                    self.logger.debug(f"User validation skipped: {str(e)}")
             
             if not batch_id:
                 batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
@@ -433,7 +463,7 @@ class FileService(BaseService):
                     results.append({
                         "file_name": file.filename,
                         "status": "success",
-                        "file_id": result.id,
+                        "file_id": result.file_id,
                         "message": "Uploaded successfully"
                     })
                     success_count += 1

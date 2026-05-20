@@ -2,14 +2,19 @@
 User service for managing user operations.
 """
 
+import asyncio
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import datetime
+import aiohttp
 
 from app.application.services.base import BaseService
 from app.infrastructure.db.models.auth import User, UserCreate, UserUpdate
 from app.infrastructure.db.repositories.user_repository import UserRepository
 from app.core.security import get_password_hash
+from app.core.config import settings
+from app.infrastructure.cache import cache_manager
+from app.core.exceptions import ServiceError
 
 class UserService(BaseService):
     """
@@ -145,10 +150,114 @@ class UserService(BaseService):
     def record_login_attempt(self, user_id: UUID, success: bool) -> User:
         """Record login attempt."""
         user = self.get_user_or_404(user_id)
-        
+
         user.record_login_attempt(success)
         return self.user_repo.update(user_id, {
             'last_login_at': user.last_login_at,
             'failed_login_attempts': user.failed_login_attempts,
             'locked_until': user.locked_until,
         })
+
+    # Remote user validation methods (cache + API)
+
+    @staticmethod
+    async def validate_user_exists_remote(user_id: UUID) -> bool:
+        """
+        Validate user exists di usermanagement API.
+        Cache strategy: 5 min TTL, remote call fallback.
+        """
+        cache_key = f"user_exists:{user_id}"
+
+        # Try cache first
+        cache = await cache_manager.get_cache()
+        if cache:
+            try:
+                cached = await cache.get(cache_key)
+                if cached is not None:
+                    return cached.get("exists", False)
+            except Exception:
+                pass
+
+        # Remote call
+        user_exists = await UserService._fetch_user_exists(user_id)
+
+        # Cache result
+        if cache:
+            try:
+                await cache.set(
+                    cache_key,
+                    {"exists": user_exists},
+                    ttl=300
+                )
+            except Exception:
+                pass
+
+        return user_exists
+
+    @staticmethod
+    async def get_user_data_remote(user_id: UUID) -> Optional[Dict[str, Any]]:
+        """Get user data dari usermanagement API dengan cache."""
+        cache_key = f"user_data:{user_id}"
+
+        # Try cache
+        cache = await cache_manager.get_cache()
+        if cache:
+            try:
+                cached = await cache.get(cache_key)
+                if cached:
+                    return cached
+            except Exception:
+                pass
+
+        # Remote call
+        user_data = await UserService._fetch_user_data(user_id)
+
+        # Cache if found
+        if user_data and cache:
+            try:
+                await cache.set(cache_key, user_data, ttl=300)
+            except Exception:
+                pass
+
+        return user_data
+
+    @staticmethod
+    async def _fetch_user_exists(user_id: UUID) -> bool:
+        """Remote API call to check user exists."""
+        try:
+            url = f"{settings.security.usermanagement_api_url}/users/{user_id}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        return True
+                    elif resp.status == 404:
+                        return False
+                    elif resp.status >= 500:
+                        raise ServiceError(f"User API unavailable: {resp.status}")
+                    return False
+        except asyncio.TimeoutError:
+            raise ServiceError("User API timeout")
+        except ServiceError:
+            raise
+        except Exception as e:
+            raise ServiceError(f"Failed to validate user: {str(e)}")
+
+    @staticmethod
+    async def _fetch_user_data(user_id: UUID) -> Optional[Dict[str, Any]]:
+        """Remote API call to get user data."""
+        try:
+            url = f"{settings.security.usermanagement_api_url}/users/{user_id}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
+                    if resp.status == 200:
+                        body = await resp.json()
+                        return body.get("data") or body
+                    return None
+        except Exception:
+            return None
