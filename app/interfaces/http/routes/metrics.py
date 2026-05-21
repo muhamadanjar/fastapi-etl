@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
-from app.infrastructure.db.manager import get_session
+from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.metrics_service import MetricsService
 from app.infrastructure.db.models.etl_control.performance_metrics import PerformanceMetricRead
 from app.interfaces.dependencies import get_current_user
@@ -24,7 +24,7 @@ async def list_metrics(
     end_date: Optional[datetime] = Query(None, description="Filter by end date"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -52,7 +52,7 @@ async def list_metrics(
 @router.get("/executions/{execution_id}", response_model=APIResponse[List[PerformanceMetricRead]])
 async def get_execution_metrics(
     execution_id: UUID,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -75,7 +75,7 @@ async def get_execution_metrics(
 async def get_metrics_summary(
     execution_id: Optional[UUID] = Query(None, description="Filter by execution ID"),
     days: int = Query(7, ge=1, le=365, description="Number of days to analyze"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -102,7 +102,7 @@ async def get_metrics_trends(
     metric_name: str = Query("records_per_second", description="Metric to analyze"),
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
     interval: str = Query("day", regex="^(hour|day|week)$", description="Grouping interval"),
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
@@ -127,7 +127,7 @@ async def get_metrics_trends(
 
 @router.get("/system", response_model=APIResponse[dict])
 async def get_system_metrics(
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_session_dependency),
     current_user = Depends(get_current_user)
 ):
     """
