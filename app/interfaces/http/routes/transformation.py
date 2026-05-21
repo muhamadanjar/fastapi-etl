@@ -12,6 +12,7 @@ from app.schemas.transformation import (
 )
 from app.application.services.transformation_service import TransformationService
 from app.schemas.remote_user import RemoteUserInfo as User
+from app.core.response import APIResponse
 
 router = APIRouter()
 
@@ -19,23 +20,24 @@ router = APIRouter()
 # TRANSFORMATION RULES ENDPOINTS
 # ==============================================
 
-@router.post("/rules", response_model=Dict[str, Any])
+@router.post("/rules")
 async def create_transformation_rule(
     rule_data: TransformationRuleCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
+):
     """Create a new transformation rule"""
     try:
         transformation_service = TransformationService(db)
-        return await transformation_service.create_transformation_rule(rule_data.dict())
+        result = await transformation_service.create_transformation_rule(rule_data.dict())
+        return APIResponse.success(data=result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.get("/rules", response_model=List[TransformationRuleRead])
+@router.get("/rules")
 async def list_transformation_rules(
     source_format: Optional[str] = Query(None, description="Filter by source format"),
     target_format: Optional[str] = Query(None, description="Filter by target format"),
@@ -45,7 +47,7 @@ async def list_transformation_rules(
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> List[TransformationRuleRead]:
+):
     """List transformation rules with optional filtering"""
     try:
         transformation_service = TransformationService(db)
@@ -53,42 +55,42 @@ async def list_transformation_rules(
             source_format=source_format,
             target_format=target_format
         )
-        
+
         # Apply additional filters
         if transformation_type:
             rules = [r for r in rules if r.get('transformation_type') == transformation_type]
         if is_active is not None:
             rules = [r for r in rules if r.get('is_active') == is_active]
-        
+
         # Apply pagination
-        return rules[skip:skip + limit]
-        
+        return APIResponse.success(data=rules[skip:skip + limit])
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.get("/rules/{rule_id}", response_model=TransformationRuleRead)
+@router.get("/rules/{rule_id}")
 async def get_transformation_rule(
-    rule_id: int,
+    rule_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> TransformationRuleRead:
+):
     """Get transformation rule by ID"""
     try:
         transformation_service = TransformationService(db)
         rules = await transformation_service.get_transformation_rules()
-        
+
         rule = next((r for r in rules if r.get('rule_id') == rule_id), None)
         if not rule:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Transformation rule not found"
             )
-        
-        return TransformationRuleRead(**rule)
-        
+
+        return APIResponse.success(data=rule)
+
     except HTTPException:
         raise
     except Exception as e:
@@ -97,20 +99,21 @@ async def get_transformation_rule(
             detail=str(e)
         )
 
-@router.put("/rules/{rule_id}", response_model=Dict[str, Any])
+@router.put("/rules/{rule_id}")
 async def update_transformation_rule(
-    rule_id: int,
+    rule_id: str,
     rule_data: TransformationRuleUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
+):
     """Update transformation rule"""
     try:
         transformation_service = TransformationService(db)
-        return await transformation_service.update_transformation_rule(
-            rule_id, 
+        result = await transformation_service.update_transformation_rule(
+            rule_id,
             rule_data.dict(exclude_unset=True)
         )
+        return APIResponse.success(data=result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -119,17 +122,17 @@ async def update_transformation_rule(
 
 @router.delete("/rules/{rule_id}")
 async def delete_transformation_rule(
-    rule_id: int,
+    rule_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, str]:
+):
     """Delete transformation rule"""
     try:
         transformation_service = TransformationService(db)
         success = await transformation_service.delete_transformation_rule(rule_id)
-        
+
         if success:
-            return {"message": "Transformation rule deleted successfully"}
+            return APIResponse.success(data={"message": "Transformation rule deleted successfully"})
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,23 +150,24 @@ async def delete_transformation_rule(
 # FIELD MAPPINGS ENDPOINTS
 # ==============================================
 
-@router.post("/mappings", response_model=Dict[str, Any])
+@router.post("/mappings")
 async def create_field_mapping(
     mapping_data: FieldMappingCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
+):
     """Create a new field mapping"""
     try:
         transformation_service = TransformationService(db)
-        return await transformation_service.create_field_mapping(mapping_data.dict())
+        result = await transformation_service.create_field_mapping(mapping_data.dict())
+        return APIResponse.success(data=result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.get("/mappings", response_model=List[FieldMappingRead])
+@router.get("/mappings")
 async def list_field_mappings(
     source_entity: Optional[str] = Query(None, description="Filter by source entity"),
     target_entity: Optional[str] = Query(None, description="Filter by target entity"),
@@ -172,7 +176,7 @@ async def list_field_mappings(
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> List[FieldMappingRead]:
+):
     """List field mappings with optional filtering"""
     try:
         transformation_service = TransformationService(db)
@@ -180,40 +184,40 @@ async def list_field_mappings(
             source_entity=source_entity,
             target_entity=target_entity
         )
-        
+
         # Apply additional filters
         if mapping_type:
             mappings = [m for m in mappings if m.get('mapping_type') == mapping_type]
-        
+
         # Apply pagination
-        return [FieldMappingRead(**mapping) for mapping in mappings[skip:skip + limit]]
-        
+        return APIResponse.success(data=mappings[skip:skip + limit])
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.get("/mappings/{mapping_id}", response_model=FieldMappingRead)
+@router.get("/mappings/{mapping_id}")
 async def get_field_mapping(
-    mapping_id: UUID,
+    mapping_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> FieldMappingRead:
+):
     """Get field mapping by ID"""
     try:
         transformation_service = TransformationService(db)
         mappings = await transformation_service.get_field_mappings()
-        
+
         mapping = next((m for m in mappings if m.get('mapping_id') == mapping_id), None)
         if not mapping:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Field mapping not found"
             )
-        
-        return FieldMappingRead(**mapping)
-        
+
+        return APIResponse.success(data=mapping)
+
     except HTTPException:
         raise
     except Exception as e:
@@ -222,19 +226,21 @@ async def get_field_mapping(
             detail=str(e)
         )
 
-@router.put("/mappings/{mapping_id}", response_model=Dict[str, Any])
+@router.put("/mappings/{mapping_id}")
 async def update_field_mapping(
-    mapping_id: UUID,
+    mapping_id: str,
     mapping_data: FieldMappingUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
+):
     """Update field mapping"""
-    # Note: You'll need to implement update_field_mapping in TransformationService
     try:
         transformation_service = TransformationService(db)
-        # This method needs to be added to TransformationService
-        return {"message": "Field mapping updated successfully", "mapping_id": mapping_id}
+        result = await transformation_service.update_field_mapping(
+            mapping_id,
+            mapping_data.dict(exclude_unset=True)
+        )
+        return APIResponse.success(data=result)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -243,16 +249,24 @@ async def update_field_mapping(
 
 @router.delete("/mappings/{mapping_id}")
 async def delete_field_mapping(
-    mapping_id: UUID,
+    mapping_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, str]:
+):
     """Delete field mapping"""
-    # Note: You'll need to implement delete_field_mapping in TransformationService
     try:
         transformation_service = TransformationService(db)
-        # This method needs to be added to TransformationService
-        return {"message": "Field mapping deleted successfully"}
+        success = await transformation_service.delete_field_mapping(mapping_id)
+
+        if success:
+            return APIResponse.success(data={"message": "Field mapping deleted successfully"})
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to delete field mapping"
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -263,12 +277,12 @@ async def delete_field_mapping(
 # DATA TRANSFORMATION ENDPOINTS
 # ==============================================
 
-@router.post("/transform-batch", response_model=DataTransformResponse)
+@router.post("/transform-batch")
 async def transform_data_batch(
     transform_request: DataTransformRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> DataTransformResponse:
+):
     """Transform a batch of data using configured rules and mappings"""
     try:
         transformation_service = TransformationService(db)
@@ -277,42 +291,44 @@ async def transform_data_batch(
             source_entity=transform_request.source_entity,
             target_entity=transform_request.target_entity
         )
-        
-        return DataTransformResponse(**result)
-        
+
+        return APIResponse.success(data=result)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.post("/transform-custom", response_model=Dict[str, Any])
+@router.post("/transform-custom")
 async def apply_custom_transformation(
     transform_request: CustomTransformRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
+):
     """Apply custom transformation logic to data batch"""
     try:
         transformation_service = TransformationService(db)
-        return await transformation_service.apply_custom_transformation(
+        result = await transformation_service.apply_custom_transformation(
             data_batch=transform_request.data_batch,
             transformation_logic=transform_request.transformation_logic,
             parameters=transform_request.parameters
         )
-        
+
+        return APIResponse.success(data=result)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-@router.post("/test-transformation", response_model=TestTransformResponse)
+@router.post("/test-transformation")
 async def test_transformation(
     test_request: TestTransformRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> TestTransformResponse:
+):
     """Test transformation configuration on sample data"""
     try:
         transformation_service = TransformationService(db)
@@ -320,9 +336,9 @@ async def test_transformation(
             sample_data=test_request.sample_data,
             transformation_config=test_request.transformation_config
         )
-        
-        return TestTransformResponse(**result)
-        
+
+        return APIResponse.success(data=result)
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -336,31 +352,31 @@ async def test_transformation(
 @router.get("/mapping-types")
 async def get_mapping_types(
     current_user: User = Depends(get_current_user)
-) -> Dict[str, List[str]]:
+):
     """Get available mapping types"""
-    return {
+    return APIResponse.success(data={
         "mapping_types": ["DIRECT", "CALCULATED", "LOOKUP"],
         "transformation_types": ["MAPPING", "CALCULATION", "VALIDATION", "ENRICHMENT"]
-    }
+    })
 
 @router.get("/entities")
 async def get_available_entities(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> Dict[str, List[str]]:
+):
     """Get available source and target entities"""
     try:
         transformation_service = TransformationService(db)
         mappings = await transformation_service.get_field_mappings()
-        
+
         source_entities = list(set(m.get('source_entity') for m in mappings if m.get('source_entity')))
         target_entities = list(set(m.get('target_entity') for m in mappings if m.get('target_entity')))
-        
-        return {
+
+        return APIResponse.success(data={
             "source_entities": source_entities,
             "target_entities": target_entities
-        }
-        
+        })
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

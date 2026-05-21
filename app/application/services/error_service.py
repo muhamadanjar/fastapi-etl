@@ -72,9 +72,9 @@ class ErrorService(BaseService):
                 is_resolved=False
             )
             
-            self.db_session.add(error_log)
-            self.db_session.commit()
-            self.db_session.refresh(error_log)
+            self.db.add(error_log)
+            self.db.commit()
+            self.db.refresh(error_log)
             
             return {
                 "error_id": error_log.id,
@@ -86,7 +86,7 @@ class ErrorService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "log_error")
     
     async def log_exception(
@@ -187,13 +187,13 @@ class ErrorService(BaseService):
             
             # Get total count
             count_stmt = select(func.count()).select_from(stmt.subquery())
-            total_count = self.db_session.execute(count_stmt).scalar()
+            total_count = self.db.execute(count_stmt).scalar()
             
             # Apply pagination and ordering
             stmt = stmt.order_by(ErrorLog.occurred_at.desc())
             stmt = stmt.limit(limit).offset(offset)
             
-            errors = self.db_session.execute(stmt).scalars().all()
+            errors = self.db.execute(stmt).scalars().all()
             
             return {
                 "errors": [
@@ -241,7 +241,7 @@ class ErrorService(BaseService):
                 "resolved_by": resolved_by
             })
             
-            error = self.db_session.get(ErrorLog, error_id)
+            error = self.db.get(ErrorLog, error_id)
             if not error:
                 raise ETLError("Error log not found")
             
@@ -252,7 +252,7 @@ class ErrorService(BaseService):
             error.resolved_at = datetime.utcnow()
             error.resolved_by = resolved_by
             
-            self.db_session.commit()
+            self.db.commit()
             
             return {
                 "error_id": error_id,
@@ -263,7 +263,7 @@ class ErrorService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "resolve_error")
     
     async def get_error_summary(
@@ -293,7 +293,7 @@ class ErrorService(BaseService):
             if job_execution_id:
                 stmt = stmt.where(ErrorLog.job_execution_id == job_execution_id)
             
-            errors = self.db_session.execute(stmt).scalars().all()
+            errors = self.db.execute(stmt).scalars().all()
             
             # Calculate statistics
             total_errors = len(errors)

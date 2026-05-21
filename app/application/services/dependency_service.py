@@ -63,8 +63,8 @@ class DependencyService(BaseService):
             })
             
             # Validate jobs exist
-            parent_job = self.db_session.get(EtlJob, parent_job_id)
-            child_job = self.db_session.get(EtlJob, child_job_id)
+            parent_job = self.db.get(EtlJob, parent_job_id)
+            child_job = self.db.get(EtlJob, child_job_id)
             
             if not parent_job:
                 raise DependencyError(f"Parent job {parent_job_id} not found")
@@ -82,7 +82,7 @@ class DependencyService(BaseService):
                 )
             
             # Check if dependency already exists
-            existing = self.db_session.execute(
+            existing = self.db.execute(
                 select(JobDependency).where(
                     and_(
                         JobDependency.parent_job_id == parent_job_id,
@@ -104,9 +104,9 @@ class DependencyService(BaseService):
                 is_active=True
             )
             
-            self.db_session.add(dependency)
-            self.db_session.commit()
-            self.db_session.refresh(dependency)
+            self.db.add(dependency)
+            self.db.commit()
+            self.db.refresh(dependency)
             
             return {
                 "dependency_id": dependency.id,
@@ -120,10 +120,10 @@ class DependencyService(BaseService):
             }
             
         except DependencyError:
-            self.db_session.rollback()
+            self.db.rollback()
             raise
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "add_dependency")
     
     async def remove_dependency(self, dependency_id: UUID) -> bool:
@@ -131,18 +131,18 @@ class DependencyService(BaseService):
         try:
             self.log_operation("remove_dependency", {"dependency_id": dependency_id})
             
-            dependency = self.db_session.get(JobDependency, dependency_id)
+            dependency = self.db.get(JobDependency, dependency_id)
             if not dependency:
                 raise DependencyError("Dependency not found")
             
             # Soft delete by marking as inactive
             dependency.is_active = False
-            self.db_session.commit()
+            self.db.commit()
             
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "remove_dependency")
     
     async def get_job_dependencies(
@@ -170,7 +170,7 @@ class DependencyService(BaseService):
             if not include_inactive:
                 parent_stmt = parent_stmt.where(JobDependency.is_active == True)
             
-            parent_deps = self.db_session.execute(parent_stmt).scalars().all()
+            parent_deps = self.db.execute(parent_stmt).scalars().all()
             
             # Get child dependencies (jobs that depend on this job)
             child_stmt = select(JobDependency).where(
@@ -179,7 +179,7 @@ class DependencyService(BaseService):
             if not include_inactive:
                 child_stmt = child_stmt.where(JobDependency.is_active == True)
             
-            child_deps = self.db_session.execute(child_stmt).scalars().all()
+            child_deps = self.db.execute(child_stmt).scalars().all()
             
             return {
                 "job_id": job_id,
@@ -224,7 +224,7 @@ class DependencyService(BaseService):
             self.log_operation("check_dependencies_met", {"job_id": job_id})
             
             # Get active parent dependencies
-            parent_deps = self.db_session.execute(
+            parent_deps = self.db.execute(
                 select(JobDependency).where(
                     and_(
                         JobDependency.child_job_id == job_id,
@@ -246,7 +246,7 @@ class DependencyService(BaseService):
             
             for dep in parent_deps:
                 # Get latest execution of parent job
-                latest_execution = self.db_session.execute(
+                latest_execution = self.db.execute(
                     select(JobExecution)
                     .where(JobExecution.job_id == dep.parent_job_id)
                     .order_by(JobExecution.created_at.desc())
@@ -276,7 +276,7 @@ class DependencyService(BaseService):
                         reason = "Parent job has not produced data"
                 
                 if not is_met:
-                    parent_job = self.db_session.get(EtlJob, dep.parent_job_id)
+                    parent_job = self.db.get(EtlJob, dep.parent_job_id)
                     unmet_dependencies.append({
                         "parent_job_id": dep.parent_job_id,
                         "parent_job_name": parent_job.job_name if parent_job else "Unknown",
@@ -320,12 +320,12 @@ class DependencyService(BaseService):
                 
                 visited.add(current_job_id)
                 
-                job = self.db_session.get(EtlJob, current_job_id)
+                job = self.db.get(EtlJob, current_job_id)
                 if not job:
                     return {"error": "Job not found"}
                 
                 # Get parent dependencies
-                parent_deps = self.db_session.execute(
+                parent_deps = self.db.execute(
                     select(JobDependency).where(
                         and_(
                             JobDependency.child_job_id == current_job_id,
@@ -372,7 +372,7 @@ class DependencyService(BaseService):
             self.log_operation("get_executable_jobs")
             
             # Get all active jobs
-            active_jobs = self.db_session.execute(
+            active_jobs = self.db.execute(
                 select(EtlJob).where(EtlJob.is_active == True)
             ).scalars().all()
             
@@ -414,7 +414,7 @@ class DependencyService(BaseService):
             visited.add(from_job)
             
             # Get all parents of from_job
-            parents = self.db_session.execute(
+            parents = self.db.execute(
                 select(JobDependency).where(
                     and_(
                         JobDependency.child_job_id == from_job,

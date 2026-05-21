@@ -291,7 +291,7 @@ class ExcelProcessor(BaseProcessor):
                 "processor": "ExcelProcessor"
             })
             file_registry.file_metadata = metadata
-            self.db_session.add(file_registry)
+            self.db.add(file_registry)
             
             # Detect and save structure for all sheets
             structure_info = await self.detect_structure(file_path)

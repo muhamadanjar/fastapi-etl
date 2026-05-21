@@ -52,7 +52,7 @@ class TransformationService(BaseService):
             self.db.refresh(rule)
             
             return {
-                "rule_id": rule.rule_id,
+                "rule_id": str(rule.id),
                 "rule_name": rule.rule_name,
                 "transformation_type": rule.transformation_type,
                 "status": "created"
@@ -89,7 +89,7 @@ class TransformationService(BaseService):
             self.db.refresh(mapping)
             
             return {
-                "mapping_id": mapping.mapping_id,
+                "mapping_id": str(mapping.id),
                 "source_field": mapping.source_field,
                 "target_field": mapping.target_field,
                 "mapping_type": mapping.mapping_type,
@@ -206,20 +206,20 @@ class TransformationService(BaseService):
                 "source_format": source_format,
                 "target_format": target_format
             })
-            
+
             stmt = select(TransformationRule).where(TransformationRule.is_active == True)
-            
+
             if source_format:
                 stmt = stmt.where(TransformationRule.source_format == source_format)
             if target_format:
                 stmt = stmt.where(TransformationRule.target_format == target_format)
-            
-            rules = self.db_session.execute(stmt).scalars().all()
+
+            rules = self.db.execute(stmt).scalars().all()
             
             result = []
             for rule in rules:
                 result.append({
-                    "rule_id": rule.rule_id,
+                    "rule_id": str(rule.id),
                     "rule_name": rule.rule_name,
                     "source_format": rule.source_format,
                     "target_format": rule.target_format,
@@ -243,18 +243,18 @@ class TransformationService(BaseService):
                 "source_entity": source_entity,
                 "target_entity": target_entity
             })
-            
+
             stmt = select(FieldMapping)
-            
+
             if source_entity:
                 stmt = stmt.where(FieldMapping.source_entity == source_entity)
             if target_entity:
                 stmt = stmt.where(FieldMapping.target_entity == target_entity)
-            
-            mappings = self.db_session.execute(stmt).scalars().all()
-            
+
+            mappings = self.db.execute(stmt).scalars().all()
+
             return [{
-                "mapping_id": mapping.mapping_id,
+                "mapping_id": str(mapping.id),
                 "source_entity": mapping.source_entity,
                 "source_field": mapping.source_field,
                 "target_entity": mapping.target_entity,
@@ -270,59 +270,107 @@ class TransformationService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_field_mappings")
     
-    async def update_transformation_rule(self, rule_id: int, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_transformation_rule(self, rule_id: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing transformation rule."""
         try:
             self.log_operation("update_transformation_rule", {"rule_id": rule_id})
-            
-            rule = self.db_session.get(TransformationRule, rule_id)
+
+            rule = self.db.get(TransformationRule, rule_id)
             if not rule:
                 raise TransformationError("Transformation rule not found")
-            
+
             # Validate transformation logic if provided
             if "rule_logic" in rule_data:
                 self._validate_transformation_logic(
                     rule_data["rule_logic"],
                     rule_data.get("transformation_type", rule.transformation_type)
                 )
-            
+
             # Update fields
             for key, value in rule_data.items():
                 if hasattr(rule, key):
                     setattr(rule, key, value)
-            
-            self.db_session.commit()
-            
+
+            self.db.commit()
+
             return {
-                "rule_id": rule.rule_id,
+                "rule_id": str(rule.id),
                 "rule_name": rule.rule_name,
                 "transformation_type": rule.transformation_type,
                 "is_active": rule.is_active,
                 "status": "updated"
             }
-            
+
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "update_transformation_rule")
     
-    async def delete_transformation_rule(self, rule_id: int) -> bool:
+    async def delete_transformation_rule(self, rule_id: str) -> bool:
         """Delete a transformation rule."""
         try:
             self.log_operation("delete_transformation_rule", {"rule_id": rule_id})
-            
-            rule = self.db_session.get(TransformationRule, rule_id)
+
+            rule = self.db.get(TransformationRule, rule_id)
             if not rule:
                 raise TransformationError("Transformation rule not found")
-            
-            self.db_session.delete(rule)
-            self.db_session.commit()
-            
+
+            self.db.delete(rule)
+            self.db.commit()
+
             return True
-            
+
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "delete_transformation_rule")
-    
+
+    async def update_field_mapping(self, mapping_id: str, mapping_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing field mapping."""
+        try:
+            self.log_operation("update_field_mapping", {"mapping_id": mapping_id})
+
+            mapping = self.db.get(FieldMapping, mapping_id)
+            if not mapping:
+                raise TransformationError("Field mapping not found")
+
+            # Update fields
+            for key, value in mapping_data.items():
+                if hasattr(mapping, key):
+                    setattr(mapping, key, value)
+
+            self.db.commit()
+
+            return {
+                "mapping_id": str(mapping.id),
+                "source_entity": mapping.source_entity,
+                "target_entity": mapping.target_entity,
+                "source_field": mapping.source_field,
+                "target_field": mapping.target_field,
+                "mapping_type": mapping.mapping_type,
+                "status": "updated"
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "update_field_mapping")
+
+    async def delete_field_mapping(self, mapping_id: str) -> bool:
+        """Delete a field mapping."""
+        try:
+            self.log_operation("delete_field_mapping", {"mapping_id": mapping_id})
+
+            mapping = self.db.get(FieldMapping, mapping_id)
+            if not mapping:
+                raise TransformationError("Field mapping not found")
+
+            self.db.delete(mapping)
+            self.db.commit()
+
+            return True
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "delete_field_mapping")
+
     async def test_transformation(self, sample_data: List[Dict[str, Any]], transformation_config: Dict[str, Any]) -> Dict[str, Any]:
         """Test transformation configuration on sample data."""
         try:
@@ -372,8 +420,8 @@ class TransformationService(BaseService):
                 FieldMapping.target_entity == target_entity
             )
         )
-        return self.db_session.execute(stmt).scalars().all()
-    
+        return self.db.execute(stmt).scalars().all()
+
     def _get_transformation_rules(self, source_entity: str, target_entity: str) -> List[TransformationRule]:
         """Get transformation rules for entity transformation."""
         stmt = select(TransformationRule).where(
@@ -383,7 +431,7 @@ class TransformationService(BaseService):
                 TransformationRule.is_active == True
             )
         ).order_by(TransformationRule.priority)
-        return self.db_session.execute(stmt).scalars().all()
+        return self.db.execute(stmt).scalars().all()
     
     def _apply_field_mappings(self, record: Dict[str, Any], mappings: List[FieldMapping]) -> Dict[str, Any]:
         """Apply field mappings to a single record."""
@@ -478,7 +526,7 @@ class TransformationService(BaseService):
         """Lookup value from lookup table."""
         if ":" in lookup_expression:
             table_name, lookup_key = lookup_expression.split(":", 1)
-            
+
             stmt = select(LookupTable).where(
                 and_(
                     LookupTable.lookup_name == table_name,
@@ -486,11 +534,11 @@ class TransformationService(BaseService):
                     LookupTable.is_active == True
                 )
             )
-            lookup_record = self.db_session.execute(stmt).scalar_one_or_none()
-            
+            lookup_record = self.db.execute(stmt).scalar_one_or_none()
+
             if lookup_record:
                 return lookup_record.lookup_value
-        
+
         return source_value
     
     def _apply_custom_logic(self, record: Dict[str, Any], logic: str, parameters: Dict[str, Any]) -> Dict[str, Any]:

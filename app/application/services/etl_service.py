@@ -281,7 +281,7 @@ class ETLService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             
             # Publish job failed event
             try:
@@ -364,11 +364,11 @@ class ETLService(BaseService):
         try:
             self.log_operation("get_execution_details", {"execution_id": execution_id})
             
-            execution = self.db_session.get(JobExecution, execution_id)
+            execution = self.db.get(JobExecution, execution_id)
             if not execution:
                 raise ETLError("Execution not found")
             
-            job = self.db_session.get(EtlJob, execution.job_id)
+            job = self.db.get(EtlJob, execution.job_id)
             
             return {
                 "execution_id": execution.execution_id,
@@ -395,7 +395,7 @@ class ETLService(BaseService):
         try:
             self.log_operation("cancel_execution", {"execution_id": execution_id})
             
-            execution = self.db_session.get(JobExecution, execution_id)
+            execution = self.db.get(JobExecution, execution_id)
             if not execution:
                 raise ETLError("Execution not found")
             
@@ -406,11 +406,11 @@ class ETLService(BaseService):
             execution.end_time = get_current_timestamp()
             execution.execution_log = "Execution cancelled by user"
             
-            self.db_session.commit()
+            self.db.commit()
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "cancel_execution")
     
     async def get_jobs_list(self, job_type: str = None, is_active: bool = None) -> List[Dict[str, Any]]:
@@ -527,7 +527,7 @@ class ETLService(BaseService):
             }
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "update_job")
     
     async def delete_job(self, job_id: int) -> bool:
@@ -535,7 +535,7 @@ class ETLService(BaseService):
         try:
             self.log_operation("delete_job", {"job_id": job_id})
             
-            job = self.db_session.get(EtlJob, job_id)
+            job = self.db.get(EtlJob, job_id)
             if not job:
                 raise ETLError("Job not found")
             
@@ -547,7 +547,7 @@ class ETLService(BaseService):
                     JobExecution.status == JobStatus.RUNNING.value
                 ))
             )
-            running_executions = self.db_session.execute(running_stmt).scalars().all()
+            running_executions = self.db.execute(running_stmt).scalars().all()
             
             if running_executions:
                 raise ETLError("Cannot delete job with running executions")
@@ -556,7 +556,7 @@ class ETLService(BaseService):
             return True
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.handle_error(e, "delete_job")
     
     # Private helper methods

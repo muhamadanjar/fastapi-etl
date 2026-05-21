@@ -40,6 +40,9 @@ class EventType(str, Enum):
     ERROR_OCCURRED = "error.occurred"
     ERROR_RESOLVED = "error.resolved"
     
+    # Report events
+    REPORT_GENERATED = "report.generated"
+
     # System events
     SYSTEM_HEALTH_CHECK = "system.health.check"
     SYSTEM_ALERT = "system.alert"

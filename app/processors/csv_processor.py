@@ -254,7 +254,7 @@ class CSVProcessor(BaseProcessor):
                 "processor": "CSVProcessor"
             })
             file_registry.file_metadata = metadata
-            self.db_session.add(file_registry)
+            self.db.add(file_registry)
             
             # Detect and save column structure
             columns_info = await self.detect_structure(file_path)

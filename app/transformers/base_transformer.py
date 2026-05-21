@@ -86,7 +86,7 @@ class BaseTransformer(ABC):
             job_execution_id: Optional job execution ID for tracking
             **kwargs: Additional configuration parameters
         """
-        self.db_session = db_session
+        self.db = db_session
         self.job_execution_id = job_execution_id
         self.logger = logger
         
@@ -236,7 +236,7 @@ class BaseTransformer(ABC):
                     await self._save_batch_results(batch_results, output_entity_type)
                 
                 # Commit batch to database
-                self.db_session.commit()
+                self.db.commit()
             
             self.end_time = datetime.utcnow()
             
@@ -278,7 +278,7 @@ class BaseTransformer(ABC):
                         job_execution_id=self.job_execution_id
                     )
                     
-                    self.db_session.add(standardized_record)
+                    self.db.add(standardized_record)
                     
         except Exception as e:
             self.logger.error(f"Error saving batch results: {str(e)}")

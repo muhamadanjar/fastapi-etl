@@ -265,7 +265,7 @@ class XMLProcessor(BaseProcessor):
                 "processor": "XMLProcessor"
             })
             file_registry.file_metadata = metadata
-            self.db_session.add(file_registry)
+            self.db.add(file_registry)
             
             # Detect and save structure
             structure_columns = await self.detect_structure(file_path)

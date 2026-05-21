@@ -9,95 +9,52 @@ from app.interfaces.dependencies import get_db, get_current_user
 from app.schemas.response_schemas import ReportResponse, ReportRequest
 from app.application.services.report_service import ReportService
 from app.schemas.remote_user import RemoteUserInfo as User
+from app.core.response import APIResponse
+from app.core.exceptions import ServiceError
 
 router = APIRouter()
 
-@router.post("/generate", response_model=ReportResponse)
+@router.post("/generate")
 async def generate_report(
     report_request: ReportRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> ReportResponse:
+):
     """Generate a new report"""
-    report_service = ReportService(db)
-    report = await report_service.generate_report(report_request, current_user.id, background_tasks)
-    return ReportResponse.from_orm(report)
+    try:
+        report_service = ReportService(db)
+        report = await report_service.generate_report(report_request, current_user.id, background_tasks)
+        return APIResponse.success(data=ReportResponse.from_orm(report))
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
-@router.get("/", response_model=List[ReportResponse])
-async def list_reports(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    report_type: Optional[str] = Query(None, description="Filter by report type"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> List[ReportResponse]:
-    """List generated reports"""
-    report_service = ReportService(db)
-    return await report_service.list_reports(skip, limit, report_type, status, current_user.id)
-
-@router.get("/{report_id}", response_model=ReportResponse)
-async def get_report(
-    report_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> ReportResponse:
-    """Get specific report details"""
-    report_service = ReportService(db)
-    report = await report_service.get_report(report_id, current_user.id)
-    if not report:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Report not found"
-        )
-    return ReportResponse.from_orm(report)
-
-@router.get("/{report_id}/download")
-async def download_report(
-    report_id: UUID,
-    format: str = Query("pdf", regex="^(pdf|excel|csv)$"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> FileResponse:
-    """Download generated report"""
-    report_service = ReportService(db)
-    file_path = await report_service.download_report(report_id, format, current_user.id)
-    return FileResponse(
-        path=file_path,
-        media_type='application/octet-stream',
-        filename=f"report_{report_id}.{format}"
-    )
-
-@router.delete("/{report_id}")
-async def delete_report(
-    report_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-) -> Dict[str, str]:
-    """Delete a report"""
-    report_service = ReportService(db)
-    await report_service.delete_report(report_id, current_user.id)
-    return {"message": "Report deleted successfully"}
-
-@router.get("/templates/")
+@router.get("/templates")
 async def get_report_templates(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> List[Dict[str, Any]]:
+):
     """Get available report templates"""
-    report_service = ReportService(db)
-    return await report_service.get_report_templates()
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_report_templates()
+        return APIResponse.success(data=result)
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
     period: str = Query("30d", regex="^(7d|30d|90d)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Get dashboard summary data"""
-    report_service = ReportService(db)
-    return await report_service.get_dashboard_summary(period)
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_dashboard_summary(period)
+        return APIResponse.success(data=result)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.get("/analytics/data-processing")
 async def get_data_processing_analytics(
@@ -105,10 +62,14 @@ async def get_data_processing_analytics(
     granularity: str = Query("daily", regex="^(hourly|daily|weekly)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Get data processing analytics"""
-    report_service = ReportService(db)
-    return await report_service.get_data_processing_analytics(period, granularity)
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_data_processing_analytics(period, granularity)
+        return APIResponse.success(data=result)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.get("/analytics/data-quality")
 async def get_data_quality_analytics(
@@ -116,10 +77,14 @@ async def get_data_quality_analytics(
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Get data quality analytics"""
-    report_service = ReportService(db)
-    return await report_service.get_data_quality_analytics(period, entity_type)
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_data_quality_analytics(period, entity_type)
+        return APIResponse.success(data=result)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.get("/analytics/entity-growth")
 async def get_entity_growth_analytics(
@@ -127,10 +92,14 @@ async def get_entity_growth_analytics(
     entity_type: Optional[str] = Query(None, description="Filter by entity type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Get entity growth analytics"""
-    report_service = ReportService(db)
-    return await report_service.get_entity_growth_analytics(period, entity_type)
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_entity_growth_analytics(period, entity_type)
+        return APIResponse.success(data=result)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.get("/analytics/performance")
 async def get_performance_analytics(
@@ -138,10 +107,14 @@ async def get_performance_analytics(
     job_type: Optional[str] = Query(None, description="Filter by job type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """Get system performance analytics"""
-    report_service = ReportService(db)
-    return await report_service.get_performance_analytics(period, job_type)
+    try:
+        report_service = ReportService(db)
+        result = await report_service.get_performance_analytics(period, job_type)
+        return APIResponse.success(data=result)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @router.post("/schedule")
 async def schedule_report(
@@ -149,11 +122,14 @@ async def schedule_report(
     schedule_expression: str = Query(..., description="Cron expression for scheduling"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> Dict[str, str]:
+):
     """Schedule automatic report generation"""
-    report_service = ReportService(db)
-    schedule_id = await report_service.schedule_report(report_request, schedule_expression, current_user.id)
-    return {"message": "Report scheduled successfully", "schedule_id": str(schedule_id)}
+    try:
+        report_service = ReportService(db)
+        schedule_id = await report_service.schedule_report(report_request, schedule_expression, current_user.id)
+        return APIResponse.success(data={"schedule_id": str(schedule_id)})
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
 @router.get("/export/entities")
 async def export_entities(
@@ -161,15 +137,18 @@ async def export_entities(
     format: str = Query("csv", regex="^(csv|excel|json)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FileResponse:
+):
     """Export entities data"""
-    report_service = ReportService(db)
-    file_path = await report_service.export_entities(entity_type, format, current_user.id)
-    return FileResponse(
-        path=file_path,
-        media_type='application/octet-stream',
-        filename=f"entities_export.{format}"
-    )
+    try:
+        report_service = ReportService(db)
+        file_path = await report_service.export_entities(entity_type, format, current_user.id)
+        return FileResponse(
+            path=file_path,
+            media_type='application/octet-stream',
+            filename=f"entities_export.{format}"
+        )
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
 @router.get("/export/job-executions")
 async def export_job_executions(
@@ -178,15 +157,18 @@ async def export_job_executions(
     format: str = Query("csv", regex="^(csv|excel)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FileResponse:
+):
     """Export job execution data"""
-    report_service = ReportService(db)
-    file_path = await report_service.export_job_executions(job_id, period, format, current_user.id)
-    return FileResponse(
-        path=file_path,
-        media_type='application/octet-stream',
-        filename=f"job_executions_export.{format}"
-    )
+    try:
+        report_service = ReportService(db)
+        file_path = await report_service.export_job_executions(job_id, period, format, current_user.id)
+        return FileResponse(
+            path=file_path,
+            media_type='application/octet-stream',
+            filename=f"job_executions_export.{format}"
+        )
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
 @router.get("/export/data-lineage")
 async def export_data_lineage(
@@ -194,12 +176,84 @@ async def export_data_lineage(
     format: str = Query("csv", regex="^(csv|excel|json)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
-) -> FileResponse:
+):
     """Export data lineage information"""
-    report_service = ReportService(db)
-    file_path = await report_service.export_data_lineage(entity_id, format, current_user.id)
-    return FileResponse(
-        path=file_path,
-        media_type='application/octet-stream',
-        filename=f"data_lineage_export.{format}"
-    )
+    try:
+        report_service = ReportService(db)
+        file_path = await report_service.export_data_lineage(entity_id, format, current_user.id)
+        return FileResponse(
+            path=file_path,
+            media_type='application/octet-stream',
+            filename=f"data_lineage_export.{format}"
+        )
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+
+@router.get("/")
+async def list_reports(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    report_type: Optional[str] = Query(None, description="Filter by report type"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List generated reports"""
+    try:
+        report_service = ReportService(db)
+        result = await report_service.list_reports(skip, limit, report_type, status, current_user.id)
+        return APIResponse.success(data=result)
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+
+@router.get("/{report_id}")
+async def get_report(
+    report_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get specific report details"""
+    try:
+        report_service = ReportService(db)
+        report = await report_service.get_report(report_id, current_user.id)
+        if not report:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Report not found"
+            )
+        return APIResponse.success(data=ReportResponse.from_orm(report))
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+
+@router.get("/{report_id}/download")
+async def download_report(
+    report_id: UUID,
+    format: str = Query("pdf", regex="^(pdf|excel|csv)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Download generated report"""
+    try:
+        report_service = ReportService(db)
+        file_path = await report_service.download_report(report_id, format, current_user.id)
+        return FileResponse(
+            path=file_path,
+            media_type='application/octet-stream',
+            filename=f"report_{report_id}.{format}"
+        )
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+
+@router.delete("/{report_id}")
+async def delete_report(
+    report_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a report"""
+    try:
+        report_service = ReportService(db)
+        await report_service.delete_report(report_id, current_user.id)
+        return APIResponse.success(data={"message": "Report deleted successfully"})
+    except ServiceError:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")

@@ -31,7 +31,7 @@ class BaseProcessor(ABC):
             db_session: Database session for data operations
             batch_id: Optional batch ID for grouping processed records
         """
-        self.db_session = db_session
+        self.db = db_session
         self.batch_id = batch_id or self._generate_batch_id()
         self.logger = logger
         self.processed_records = 0
@@ -123,7 +123,7 @@ class BaseProcessor(ABC):
         # base_processor → application.services → file_service → processors
         from app.application.services.rejected_records_service import RejectedRecordsService
         # Initialize rejected records service
-        rejected_service = RejectedRecordsService(self.db_session)
+        rejected_service = RejectedRecordsService(self.db)
         
         try:
             for row_number, record in enumerate(records, 1):
@@ -146,7 +146,7 @@ class BaseProcessor(ABC):
                     )
                     
                     # Save to database
-                    self.db_session.add(raw_record)
+                    self.db.add(raw_record)
                     
                     if validation_result["is_valid"]:
                         processing_stats["successful_records"] += 1
@@ -176,7 +176,7 @@ class BaseProcessor(ABC):
                     
                     # Commit in batches for performance
                     if row_number % 1000 == 0:
-                        self.db_session.commit()
+                        self.db.commit()
                         self.logger.info(f"Processed {row_number} records ({processing_stats['rejected_records']} rejected)")
                 
                 except Exception as e:
@@ -187,7 +187,7 @@ class BaseProcessor(ABC):
                     self.logger.error(f"Error processing record {row_number}: {str(e)}")
             
             # Final commit
-            self.db_session.commit()
+            self.db.commit()
             
             # Calculate processing time
             end_time = datetime.utcnow()
@@ -197,7 +197,7 @@ class BaseProcessor(ABC):
             return processing_stats
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.logger.error(f"Error during record processing: {str(e)}")
             raise FileProcessingException(f"Failed to process records: {str(e)}")
     
@@ -223,13 +223,13 @@ class BaseProcessor(ABC):
                     max_length=column_info.get("max_length")
                 )
                 
-                self.db_session.add(column_structure)
+                self.db.add(column_structure)
             
-            self.db_session.commit()
+            self.db.commit()
             self.logger.info(f"Saved column structure for {len(columns)} columns")
             
         except Exception as e:
-            self.db_session.rollback()
+            self.db.rollback()
             self.logger.error(f"Error saving column structure: {str(e)}")
             raise FileProcessingException(f"Failed to save column structure: {str(e)}")
     

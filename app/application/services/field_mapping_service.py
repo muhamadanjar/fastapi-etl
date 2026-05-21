@@ -42,7 +42,7 @@ class FieldMappingService:
             db_session: Database session
             job_id: Optional job ID for filtering mappings
         """
-        self.db_session = db_session
+        self.db = db_session
         self.job_id = job_id
         self.logger = logger
 
