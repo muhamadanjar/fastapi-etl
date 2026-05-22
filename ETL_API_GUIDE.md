@@ -10,16 +10,24 @@ Dokumentasi step-by-step untuk menggunakan ETL API. API ini mengimplementasikan 
 2. [Autentikasi](#2-autentikasi)
 3. [Upload File](#3-upload-file)
 4. [Buat ETL Job](#4-buat-etl-job)
+   - 4.1 [Konsep: Job Definition vs File](#41-konsep-job-definition-vs-file)
+   - 4.2 [Strategi File Selection di job_config](#42-strategi-file-selection-di-job_config)
+   - 4.3 [Buat Job](#43-buat-job)
 5. [Konfigurasi Transformation Rules](#5-konfigurasi-transformation-rules)
 6. [Konfigurasi Field Mappings](#6-konfigurasi-field-mappings)
 7. [Setup Quality Rules](#7-setup-quality-rules)
 8. [Job Dependencies (Opsional)](#8-job-dependencies-opsional)
 9. [Eksekusi Job](#9-eksekusi-job)
+   - 9.1 [Eksekusi Scheduled (Criteria-Based)](#91-eksekusi-scheduled-criteria-based)
+   - 9.2 [Eksekusi dengan File Spesifik (Manual)](#92-eksekusi-dengan-file-spesifik-manual)
+   - 9.3 [Full ETL Job](#93-full-etl-job-extract--transform--load-sekaligus)
 10. [Monitor Eksekusi](#10-monitor-eksekusi)
 11. [Lihat Hasil](#11-lihat-hasil)
 12. [Penanganan Error](#12-penanganan-error)
 13. [Scheduling Job (Opsional)](#13-scheduling-job-opsional)
-14. [Referensi Endpoint Lengkap](#14-referensi-endpoint-lengkap)
+14. [Conflict Resolution Strategies](#conflict-resolution-strategies-phase-load)
+15. [Entity Deduplication](#entity-deduplication-phase-load)
+16. [Referensi Endpoint Lengkap](#14-referensi-endpoint-lengkap)
 
 ---
 
@@ -309,7 +317,47 @@ Authorization: Bearer <TOKEN>
 
 ## 4. Buat ETL Job
 
-ETL Job adalah definisi dari satu proses ETL lengkap yang akan dijalankan.
+`EtlJob` adalah **job definition (template)** — mendefinisikan HOW memproses data, bukan file spesifik mana yang diproses. File yang diproses ditentukan saat execution, bukan saat job creation.
+
+### 4.1 Konsep: Job Definition vs File
+
+```
+EtlJob          = Template/resep (bagaimana memproses)
+FileRegistry    = Data (file yang diupload)
+JobExecution    = Runtime (saat job dijalankan dengan file tertentu)
+```
+
+`EtlJob` tidak memiliki relasi langsung ke `FileRegistry` karena:
+- Scheduled job tidak tahu file mana yang akan ada saat runtime
+- Job yang sama bisa digunakan untuk berbagai batch file berbeda
+- File selection harus dinamis per execution
+
+### 4.2 Strategi File Selection di job_config
+
+`job_config` di `EtlJob` menyimpan **kriteria seleksi file**, bukan file_id literal:
+
+**Scheduled job (proses semua file PENDING sesuai kriteria):**
+```json
+{
+  "job_config": {
+    "source_type": "FILE",
+    "file_type": "CSV",
+    "source_system": "SalesForce",
+    "processing_status": "PENDING",
+    "entity_type": "CUSTOMER",
+    "batch_size": 1000,
+    "key_fields": ["id", "email"],
+    "conflict_resolution_strategy": "newer_wins"
+  }
+}
+```
+
+Saat execution, sistem query `FileRegistry` dengan kriteria tersebut untuk mendapat `file_ids`.
+
+**Manual/one-time job (proses file spesifik):**
+Pass `file_ids` explicit saat trigger execution — lihat [Section 9.2](#92-eksekusi-dengan-file-spesifik-manual).
+
+### 4.3 Buat Job
 
 ```http
 POST /jobs/
@@ -317,32 +365,59 @@ Authorization: Bearer <TOKEN>
 Content-Type: application/json
 
 {
-  "name": "Daily Customer Load",
-  "description": "Load customer data dari CSV setiap hari",
-  "file_id": "550e8400-e29b-41d4-a716-446655440000",
-  "transformation_rules": [],
-  "field_mappings": [],
-  "quality_rules": []
+  "job_name": "Daily Customer Load",
+  "job_type": "EXTRACT",
+  "job_category": "FILE_PROCESSING",
+  "source_type": "FILE",
+  "target_schema": "staging",
+  "target_table": "customers",
+  "schedule_expression": "0 2 * * *",
+  "is_active": true,
+  "job_config": {
+    "file_type": "CSV",
+    "source_system": "SalesForce",
+    "entity_type": "CUSTOMER",
+    "batch_size": 1000,
+    "key_fields": ["id", "email"],
+    "similarity_threshold": 0.85,
+    "conflict_resolution_strategy": "newer_wins"
+  }
 }
 ```
 
 **Response (201 Created):**
 ```json
 {
-  "job_id": "job-uuid-001",
-  "name": "Daily Customer Load",
-  "description": "Load customer data dari CSV setiap hari",
-  "file_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "active",
-  "created_at": "2026-05-21T10:00:00Z",
-  "created_by": "user@example.com",
-  "last_execution": null,
-  "execution_count": 0,
-  "transformation_rules": [],
-  "field_mappings": [],
-  "quality_rules": []
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "job_name": "Daily Customer Load",
+  "job_type": "EXTRACT",
+  "job_category": "FILE_PROCESSING",
+  "source_type": "FILE",
+  "target_schema": "staging",
+  "target_table": "customers",
+  "schedule_expression": "0 2 * * *",
+  "is_active": true,
+  "created_at": "2026-05-21T10:00:00Z"
 }
 ```
+
+**Notes:**
+- `transformation_rules`, `field_mappings`, `quality_rules` dibuat terpisah via endpoint masing-masing
+- `job_type`: `EXTRACT`, `TRANSFORM`, `LOAD`, `VALIDATE`
+- `job_category`: `FILE_PROCESSING`, `DATA_CLEANING`, `AGGREGATION`, `VALIDATION`, `EXPORT`
+- `source_type`: `FILE`, `API`, `DATABASE`, `STREAM`
+
+### job_config Field Reference
+
+| Field | Tipe | Deskripsi |
+|-------|------|-----------|
+| `file_type` | string | Filter file by type: `CSV`, `EXCEL`, `JSON`, `XML` |
+| `source_system` | string | Filter by source system name |
+| `entity_type` | string | Target entity type (e.g. `CUSTOMER`, `PRODUCT`) |
+| `batch_size` | int | Jumlah records per batch (default: 1000) |
+| `key_fields` | array | Fields untuk entity hash & dedup (e.g. `["id", "email"]`) |
+| `similarity_threshold` | float | Threshold fuzzy match untuk dedup (default: 0.85) |
+| `conflict_resolution_strategy` | string | `newer_wins`, `score_based`, `conservative`, `merge` |
 
 ### Job Status Values
 
@@ -745,9 +820,11 @@ Authorization: Bearer <TOKEN>
 
 ## 9. Eksekusi Job
 
-Trigger job untuk dijalankan melalui 8-phase ETL pipeline.
+Trigger job untuk dijalankan melalui ETL pipeline. Ada dua cara: scheduled (pakai kriteria dari job_config) atau manual (pass file_ids explicit).
 
-### Trigger Eksekusi
+### 9.1 Eksekusi Scheduled (Criteria-Based)
+
+Sistem otomatis query `FileRegistry` berdasarkan kriteria di `job_config`:
 
 ```http
 POST /jobs/{job_id}/execute
@@ -755,11 +832,36 @@ Authorization: Bearer <TOKEN>
 Content-Type: application/json
 
 {
-  "execution_label": "Daily Run 2026-05-21",
-  "notify_on_complete": true,
-  "notification_emails": ["admin@example.com"]
+  "execution_label": "Daily Run 2026-05-21"
 }
 ```
+
+Sistem akan:
+1. Baca `job_config` dari job → ambil filter criteria (`file_type`, `source_system`, dll.)
+2. Query `FileRegistry` WHERE `processing_status='PENDING'` AND criteria match
+3. Proses semua file yang ditemukan
+
+### 9.2 Eksekusi dengan File Spesifik (Manual)
+
+Untuk memproses file tertentu saja, pass `file_ids` di `parameters`:
+
+```http
+POST /jobs/{job_id}/execute
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+{
+  "execution_label": "Reprocess Batch 2026-05-21",
+  "parameters": {
+    "file_ids": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "660f9500-f30c-52e5-b827-557766551111"
+    ]
+  }
+}
+```
+
+`parameters.file_ids` override criteria-based lookup di `job_config`.
 
 **Response (202 Accepted):**
 ```json
@@ -767,11 +869,38 @@ Content-Type: application/json
   "execution_id": "exec-uuid-001",
   "job_id": "job-uuid-001",
   "status": "queued",
-  "phase": "authentication",
+  "phase": "queued",
   "progress_percent": 0,
   "celery_task_id": "celery-task-uuid",
   "queued_at": "2026-05-21T10:10:00Z",
   "estimated_start": "2026-05-21T10:10:05Z"
+}
+```
+
+### 9.3 Full ETL Job (Extract + Transform + Load sekaligus)
+
+Untuk `job_type: FULL_ETL`, pass config per phase:
+
+```http
+POST /jobs/{job_id}/execute
+Authorization: Bearer <TOKEN>
+Content-Type: application/json
+
+{
+  "parameters": {
+    "extract": {
+      "file_ids": ["uuid1", "uuid2"]
+    },
+    "transform": {
+      "entity_type": "CUSTOMER",
+      "batch_size": 1000
+    },
+    "load": {
+      "entity_type": "CUSTOMER",
+      "key_fields": ["id", "email"],
+      "conflict_resolution_strategy": "newer_wins"
+    }
+  }
 }
 ```
 
@@ -1422,14 +1551,52 @@ Authorization: Bearer <TOKEN>
 
 ---
 
+## Conflict Resolution Strategies (Phase Load)
+
+Saat entity sudah ada di database dan ada data baru yang match, sistem resolve conflict dengan strategy berikut:
+
+| Strategy | Behavior |
+|----------|----------|
+| `newer_wins` | Data baru selalu menang (default) |
+| `score_based` | Confidence ≥ 0.9 → data baru menang; else merge selektif |
+| `conservative` | Data existing selalu menang (no update) |
+| `merge` | Recursive merge: dict digabung, list di-unique, scalar prefer existing |
+
+**Kapan pakai:**
+- `newer_wins` — source data selalu lebih update dari yang di DB
+- `conservative` — jangan overwrite data yang sudah dikurasi manual
+- `score_based` — hanya update jika data baru high-confidence
+- `merge` — enrichment use case: gabung data dari banyak source
+
+---
+
+## Entity Deduplication (Phase Load)
+
+Sistem detect duplikat via dua mekanisme:
+
+**1. Exact Match (Hash)**
+- Hitung `entity_hash = MD5(key_fields values)`
+- Jika hash sama → `confidence_score = 1.0`, record di-skip (sudah ada)
+
+**2. Fuzzy Match**
+- Jika hash berbeda tapi similarity > `similarity_threshold`
+- Record di-mark `is_duplicate=True`, `duplicate_count` di entitas asli di-increment
+- Relasi `duplicate_of` diinsert ke `entity_relationships`
+
+`key_fields` di `job_config` menentukan field mana yang dipakai untuk hash. Pilih field yang bersifat identifier unik (e.g. `["id", "email"]`).
+
+---
+
 ## Best Practices
 
-1. **Always validate data preview** sebelum create job
-2. **Start with non-critical data** untuk test workflow
-3. **Setup quality rules** sesuai business logic
-4. **Monitor executions** terutama yang pertama kali
-5. **Keep audit trail** via data lineage feature
-6. **Schedule off-peak hours** untuk job berat
-7. **Set appropriate quality thresholds** (jangan terlalu ketat)
-8. **Review rejected records** untuk identify data issues di source
+1. **Preview data sebelum create job** — pastikan kolom dan format sesuai ekspektasi
+2. **Mulai dengan `job_type: EXTRACT`** untuk test parsing, baru lanjut TRANSFORM dan LOAD
+3. **Setup quality rules** sesuai business requirement sebelum eksekusi massal
+4. **Gunakan criteria-based job_config** untuk scheduled jobs, bukan hardcode file_ids
+5. **Gunakan `parameters.file_ids`** untuk manual reprocessing file spesifik
+6. **Pilih `key_fields` yang tepat** — harus identifier unik untuk dedup benar
+7. **Monitor execution pertama** sebelum schedule recurring
+8. **Set `similarity_threshold` 0.85–0.95** — terlalu rendah banyak false duplicate, terlalu tinggi miss banyak duplicate
+9. **Review rejected records** setelah setiap run untuk identify data issues di source
+10. **Schedule off-peak hours** (misal `0 2 * * *`) untuk job berat
 

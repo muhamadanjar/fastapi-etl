@@ -6,13 +6,18 @@ from datetime import datetime
 
 from app.interfaces.dependencies import get_current_user
 from app.schemas.job_schemas import (
-    JobCreate, JobUpdate, JobResponse, JobExecutionResponse, 
+    JobCreate, JobUpdate, JobResponse, JobExecutionResponse,
     JobScheduleCreate, JobConfigUpdate
 )
 from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.etl_service import ETLService
+from app.application.services.transformation_service import TransformationService
+from app.application.services.data_quality_service import DataQualityService
+from app.schemas.transformation import TransformationRuleCreate, FieldMappingCreate
+from app.schemas.data_quality_schema import QualityRuleCreate
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
+from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 
 router = APIRouter()
 
@@ -177,3 +182,118 @@ async def restart_failed_job(
     etl_service = ETLService(db)
     new_execution_id = await etl_service.restart_job_execution(job_id, execution_id, current_user.id)
     return {"message": "Job restarted", "execution_id": str(new_execution_id)}
+
+@router.post("/{job_id}/transformation-rules")
+async def create_transformation_rule(
+    job_id: UUID,
+    rule_data: TransformationRuleCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, Any]:
+    """Create a transformation rule for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    transformation_service = TransformationService(db)
+    rule_dict = rule_data.model_dump()
+    rule_dict["job_id"] = job_id
+    return await transformation_service.create_transformation_rule(rule_dict)
+
+@router.get("/{job_id}/transformation-rules")
+async def get_transformation_rules(
+    job_id: UUID,
+    source_format: Optional[str] = Query(None),
+    target_format: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> List[Dict[str, Any]]:
+    """Get transformation rules for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    transformation_service = TransformationService(db)
+    return await transformation_service.get_transformation_rules(source_format, target_format, job_id)
+
+@router.post("/{job_id}/field-mappings")
+async def create_field_mapping(
+    job_id: UUID,
+    mapping_data: FieldMappingCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, Any]:
+    """Create a field mapping for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    transformation_service = TransformationService(db)
+    mapping_dict = mapping_data.model_dump()
+    mapping_dict["job_id"] = job_id
+    return await transformation_service.create_field_mapping(mapping_dict)
+
+@router.get("/{job_id}/field-mappings")
+async def get_field_mappings(
+    job_id: UUID,
+    source_entity: Optional[str] = Query(None),
+    target_entity: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> List[Dict[str, Any]]:
+    """Get field mappings for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    transformation_service = TransformationService(db)
+    return await transformation_service.get_field_mappings(source_entity, target_entity, job_id)
+
+@router.post("/{job_id}/quality-rules")
+async def create_quality_rule(
+    job_id: UUID,
+    rule_data: QualityRuleCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, Any]:
+    """Create a quality rule for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    data_quality_service = DataQualityService(db)
+    rule_dict = rule_data.model_dump()
+    rule_dict["job_id"] = job_id
+    return await data_quality_service.create_quality_rule(rule_dict)
+
+@router.get("/{job_id}/quality-rules")
+async def get_quality_rules(
+    job_id: UUID,
+    entity_type: Optional[str] = Query(None),
+    rule_type: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> List[Dict[str, Any]]:
+    """Get quality rules for a job"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    data_quality_service = DataQualityService(db)
+    return await data_quality_service.get_quality_rules(entity_type, rule_type, is_active, skip, limit, job_id)
+
+@router.get("/{job_id}/schedule")
+async def get_job_schedule(
+    job_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, Any]:
+    """Get job schedule configuration"""
+    job = db.get(EtlJob, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    return {"schedule_expression": job.schedule_expression}

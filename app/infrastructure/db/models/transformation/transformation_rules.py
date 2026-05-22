@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Column, JSON
 
 from app.infrastructure.db.models.base import BaseModel
@@ -17,12 +18,18 @@ class TransformationRuleBase(BaseModel):
     )
     rule_logic: Optional[str] = Field(default=None, description="SQL or script logic for the rule")
     rule_parameters: Optional[Dict[str, Any]] = Field(
-        default=None, 
+        default=None,
         sa_column=Column(JSON),
         description="Parameters for the transformation rule in JSON format"
     )
     priority: int = Field(default=1, description="Priority of the rule execution")
     is_active: bool = Field(default=True, description="Whether the rule is active")
+    job_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="etl_control.etl_jobs.id",
+        index=True,
+        description="ETL job this rule belongs to"
+    )
 
 
 class TransformationRule(TransformationRuleBase, table=True):
@@ -54,4 +61,5 @@ class TransformationRuleUpdate(SQLModel):
     rule_parameters: Optional[Dict[str, Any]] = Field(default=None)
     priority: Optional[int] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
+    job_id: Optional[UUID] = Field(default=None)
     

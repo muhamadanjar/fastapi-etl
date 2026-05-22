@@ -6,6 +6,7 @@ import re
 import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, func, or_
 
@@ -51,7 +52,8 @@ class DataQualityService(BaseService):
                 severity=rule_data.get("severity", QualitySeverity.MEDIUM.value),
                 is_active=rule_data.get("is_active", True),
                 rule_config=rule_data.get("rule_config", {}),
-                description=rule_data.get("description")
+                description=rule_data.get("description"),
+                job_id=rule_data.get("job_id")
             )
             
             self.db.add(quality_rule)
@@ -71,29 +73,33 @@ class DataQualityService(BaseService):
             self.handle_error(e, "create_quality_rule")
     
     async def get_quality_rules(
-        self, 
-        entity_type: str = None, 
+        self,
+        entity_type: str = None,
         rule_type: str = None,
         is_active: bool = None,
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
+        job_id: UUID = None
     ) -> List[Dict[str, Any]]:
         """Get quality rules with filtering."""
         try:
             self.log_operation("get_quality_rules", {
                 "entity_type": entity_type,
                 "rule_type": rule_type,
-                "is_active": is_active
+                "is_active": is_active,
+                "job_id": str(job_id) if job_id else None
             })
-            
+
             stmt = select(QualityRule)
-            
+
             if entity_type:
                 stmt = stmt.where(QualityRule.entity_type == entity_type)
             if rule_type:
                 stmt = stmt.where(QualityRule.rule_type == rule_type)
             if is_active is not None:
                 stmt = stmt.where(QualityRule.is_active == is_active)
+            if job_id:
+                stmt = stmt.where(QualityRule.job_id == job_id)
             
             stmt = stmt.order_by(QualityRule.created_at.desc()).offset(skip).limit(limit)
             rules = self.db.execute(stmt).scalars().all()

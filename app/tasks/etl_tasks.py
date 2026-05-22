@@ -19,6 +19,7 @@ from .celery_app import celery_app
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
+from app.infrastructure.db.models.etl_control.error_logs import ErrorType
 from app.infrastructure.db.models.audit.data_lineage import DataLineage
 from app.infrastructure.db.manager import get_session
 from app.processors import get_processor
@@ -29,6 +30,7 @@ from app.application.services.data_quality_service import DataQualityService
 from app.utils.logger import get_logger
 from app.core.exceptions import ETLException, FileProcessingException
 from app.utils.event_publisher import get_event_publisher
+from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
 
 logger = get_logger(__name__)
 
@@ -53,6 +55,7 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
     """
     task_id = self.request.id
     logger.info(f"Starting file processing task {task_id} for file {file_id}")
+    logger.info(f"User ID: {user_id}", extra=processing_config)
     print(f"Starting file processing task {task_id} for file {file_id}")
     
     try:
@@ -139,8 +142,7 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
         # Update file status
         try:
             with get_session() as db:
-                # Re-fetch file_record if it wasn't set or was from a closed session
-                if file_record is None or not db.is_active:
+                if file_record is None:
                     file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
                 
                 if file_record:
@@ -167,22 +169,20 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
     except Exception as e:
         logger.error(f"Unexpected error in file processing for {file_id}: {str(e)}")
         logger.error(traceback.format_exc())
-        
+
         # Log error to database
         try:
-            from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
-            from app.infrastructure.db.models.etl_control.error_logs import ErrorType
-            
-            asyncio.run(log_task_error(
-                db=db,
-                exception=e,
-                error_type=ErrorType.SYSTEM_ERROR,
-                error_severity=get_error_severity_from_exception(e),
-                context={
-                    "file_id": file_id,
-                    "task_id": task_id
-                }
-            ))
+            with get_session() as db:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=get_error_severity_from_exception(e),
+                    context={
+                        "file_id": file_id,
+                        "task_id": task_id
+                    }
+                ))
         except Exception as log_error:
             logger.error(f"Failed to log error to database: {log_error}")
         
@@ -214,340 +214,329 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
     
 @celery_app.task(
     bind=True,
-    name='etl.transformation_pipeline',
+    name='app.tasks.etl_tasks.transformation_pipeline',
     max_retries=2,
     default_retry_delay=600,  # 10 minutes
     time_limit=3600,  # 1 hour
     soft_time_limit=3300  # 55 minutes
 )
-async def run_transformation_pipeline(self, job_execution_id: str, transformation_config: Dict[str, Any]):
+def run_transformation_pipeline(self, job_execution_id: str, transformation_config: Dict[str, Any]):
     """
     Run data transformation pipeline
-    
+
     Args:
         job_execution_id: ID of the job execution
         transformation_config: Transformation configuration
-        
+
     Returns:
         Transformation results
     """
     task_id = self.request.id
     logger.info(f"Starting transformation pipeline task {task_id} for execution {job_execution_id}")
-    
-    db = next(get_db())
-    try:
-        # Get job execution record
-        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == job_execution_id)).first()
-        if not execution:
-            raise ETLException(f"Job execution not found: {job_execution_id}")
-        
-        # Update execution status
-        execution.status = 'RUNNING'
-        execution.start_time = datetime.utcnow()
-        db.add(execution)
-        db.commit()
-        
-        # Create transformation pipeline
-        stages = transformation_config.get('stages', ['clean', 'validate', 'normalize'])
-        pipeline = create_transformation_pipeline(stages, **transformation_config)
-        
-        # Get source data
-        source_query = transformation_config.get('source_query')
-        if source_query:
-            source_data = pd.read_sql(source_query, db.connection())
-            input_records = source_data.to_dict('records')
-        else:
-            # Default: get recent raw records
-            from app.infrastructure.db.models.raw_data.raw_records import RawRecords
-            recent_records = db.exec(
-                select(RawRecords)
-                .where(RawRecords.validation_status == 'VALID')
-                .limit(transformation_config.get('limit', 10000))
-            ).all()
-            input_records = [record.raw_data for record in recent_records]
-        
-        # Execute transformation pipeline
-        total_results = {}
-        for stage_idx, transformer in enumerate(pipeline):
-            stage_name = stages[stage_idx] if stage_idx < len(stages) else f"stage_{stage_idx}"
-            logger.info(f"Executing transformation stage: {stage_name}")
-            
-            # Transform the data
-            if stage_idx == 0:
-                # First stage uses input records
-                stage_results = await transformer.transform_dataset(
-                    input_records, 
-                    output_entity_type=transformation_config.get('output_entity_type')
-                )
-            else:
-                # Subsequent stages use results from previous stage
-                previous_results = total_results[stages[stage_idx - 1]]['results']
-                stage_data = [result.data for result in previous_results if result.is_success()]
-                stage_results = await transformer.transform_dataset(
-                    stage_data,
-                    output_entity_type=transformation_config.get('output_entity_type')
-                )
-            
-            total_results[stage_name] = stage_results
-            
-            # Check if stage failed critically
-            if not stage_results['success']:
-                raise ETLException(f"Transformation stage '{stage_name}' failed critically")
-        
-        # Update execution with results
-        execution.status = 'SUCCESS'
-        execution.end_time = datetime.utcnow()
-        execution.records_processed = sum(r['statistics']['records_processed'] for r in total_results.values())
-        execution.records_successful = sum(r['statistics']['records_transformed'] for r in total_results.values())
-        execution.records_failed = sum(r['statistics']['records_failed'] for r in total_results.values())
-        
-        # Store performance metrics
-        performance_metrics = {
-            'total_processing_time': (execution.end_time - execution.start_time).total_seconds(),
-            'stages_executed': len(stages),
-            'stage_results': {stage: result['statistics'] for stage, result in total_results.items()},
-            'task_id': task_id
-        }
-        execution.performance_metrics = performance_metrics
-        
-        db.add(execution)
-        db.commit()
-        
-        logger.info(f"Transformation pipeline completed for execution {job_execution_id}")
-        
-        return {
-            'status': 'success',
-            'execution_id': job_execution_id,
-            'task_id': task_id,
-            'results': total_results,
-            'performance_metrics': performance_metrics,
-            'completed_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Transformation pipeline failed for execution {job_execution_id}: {str(e)}")
-        
-        # Update execution status
+
+    with get_session() as db:
         try:
-            if 'execution' in locals():
-                execution.status = 'FAILED'
-                execution.end_time = datetime.utcnow()
-                execution.execution_log = str(e)
-                db.add(execution)
-                db.commit()
-        except Exception as commit_error:
-            logger.error(f"Failed to update execution status: {commit_error}")
-        
-        # Retry if retries available
-        if self.request.retries < self.max_retries:
-            logger.info(f"Retrying transformation pipeline for {job_execution_id}")
-            raise self.retry(exc=e, countdown=self.default_retry_delay)
-        
-        raise ETLException(f"Transformation pipeline failed: {str(e)}")
-    
-    finally:
-        db.close()
+            # Get job execution record
+            execution = db.exec(select(JobExecution).where(JobExecution.execution_id == job_execution_id)).first()
+            if not execution:
+                raise ETLException(f"Job execution not found: {job_execution_id}")
+
+            # Update execution status
+            execution.status = 'RUNNING'
+            execution.start_time = datetime.utcnow()
+            db.add(execution)
+            db.commit()
+
+            # Create transformation pipeline
+            stages = transformation_config.get('stages', ['clean', 'validate', 'normalize'])
+            pipeline = create_transformation_pipeline(stages, **transformation_config)
+
+            # Get source data
+            source_query = transformation_config.get('source_query')
+            if source_query:
+                source_data = pd.read_sql(source_query, db.connection())
+                input_records = source_data.to_dict('records')
+            else:
+                # Default: get recent raw records
+                from app.infrastructure.db.models.raw_data.raw_records import RawRecords
+                recent_records = db.exec(
+                    select(RawRecords)
+                    .where(RawRecords.validation_status == 'VALID')
+                    .limit(transformation_config.get('limit', 10000))
+                ).all()
+                input_records = [record.raw_data for record in recent_records]
+
+            # Execute transformation pipeline
+            total_results = {}
+            for stage_idx, transformer in enumerate(pipeline):
+                stage_name = stages[stage_idx] if stage_idx < len(stages) else f"stage_{stage_idx}"
+                logger.info(f"Executing transformation stage: {stage_name}")
+
+                # Transform the data
+                if stage_idx == 0:
+                    # First stage uses input records
+                    stage_results = asyncio.run(transformer.transform_dataset(
+                        input_records,
+                        output_entity_type=transformation_config.get('output_entity_type')
+                    ))
+                else:
+                    # Subsequent stages use results from previous stage
+                    previous_results = total_results[stages[stage_idx - 1]]['results']
+                    stage_data = [result.data for result in previous_results if result.is_success()]
+                    stage_results = asyncio.run(transformer.transform_dataset(
+                        stage_data,
+                        output_entity_type=transformation_config.get('output_entity_type')
+                    ))
+
+                total_results[stage_name] = stage_results
+
+                # Check if stage failed critically
+                if not stage_results['success']:
+                    raise ETLException(f"Transformation stage '{stage_name}' failed critically")
+
+            # Update execution with results
+            execution.status = 'SUCCESS'
+            execution.end_time = datetime.utcnow()
+            execution.records_processed = sum(r['statistics']['records_processed'] for r in total_results.values())
+            execution.records_successful = sum(r['statistics']['records_transformed'] for r in total_results.values())
+            execution.records_failed = sum(r['statistics']['records_failed'] for r in total_results.values())
+
+            # Store performance metrics
+            performance_metrics = {
+                'total_processing_time': (execution.end_time - execution.start_time).total_seconds(),
+                'stages_executed': len(stages),
+                'stage_results': {stage: result['statistics'] for stage, result in total_results.items()},
+                'task_id': task_id
+            }
+            execution.performance_metrics = performance_metrics
+
+            db.add(execution)
+            db.commit()
+
+            logger.info(f"Transformation pipeline completed for execution {job_execution_id}")
+
+            return {
+                'status': 'success',
+                'execution_id': job_execution_id,
+                'task_id': task_id,
+                'results': total_results,
+                'performance_metrics': performance_metrics,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Transformation pipeline failed for execution {job_execution_id}: {str(e)}")
+
+            # Update execution status
+            try:
+                if 'execution' in locals():
+                    execution.status = 'FAILED'
+                    execution.end_time = datetime.utcnow()
+                    execution.execution_log = str(e)
+                    db.add(execution)
+                    db.commit()
+            except Exception as commit_error:
+                logger.error(f"Failed to update execution status: {commit_error}")
+
+            # Retry if retries available
+            if self.request.retries < self.max_retries:
+                logger.info(f"Retrying transformation pipeline for {job_execution_id}")
+                raise self.retry(exc=e, countdown=self.default_retry_delay)
+
+            raise ETLException(f"Transformation pipeline failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
-    name='etl.execute_job',
+    name='app.tasks.etl_tasks.execute_job',
     max_retries=2,
     default_retry_delay=900,  # 15 minutes
     time_limit=7200,  # 2 hours
     soft_time_limit=6900  # 1 hour 55 minutes
 )
-async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any] = None):
+def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str = None, parameters: Dict = None):
     """
     Execute complete ETL job
-    
+
     Args:
         job_id: ID of the ETL job to execute
-        execution_parameters: Optional execution parameters
-        
+        execution_id: Execution ID
+        batch_id: Batch ID
+        parameters: Optional execution parameters
+
     Returns:
         Job execution results
     """
     task_id = self.request.id
     logger.info(f"Starting ETL job execution task {task_id} for job {job_id}")
-    
-    db = next(get_db())
-    try:
-        # Get ETL job
-        job = db.exec(select(EtlJob).where(EtlJob.job_id == job_id)).first()
-        if not job:
-            raise ETLException(f"ETL job not found: {job_id}")
-        
-        if not job.is_active:
-            raise ETLException(f"ETL job is not active: {job_id}")
-        
-        # Create job execution record
-        execution = JobExecution(
-            job_id=job_id,
-            status='RUNNING',
-            start_time=datetime.utcnow(),
-            execution_log=f"Started by task {task_id}",
-            performance_metrics={'task_id': task_id}
-        )
-        db.add(execution)
-        db.commit()
-        db.refresh(execution)
-        
-        execution_id = str(execution.execution_id)
-        
-        # Get job configuration
-        job_config = job.job_config or {}
-        if execution_parameters:
-            job_config.update(execution_parameters)
-        
-        # Execute ETL steps based on job type
-        job_type = job.job_type.lower()
-        
-        if job_type == 'extract':
-            result = await _execute_extract_job(db, execution_id, job_config)
-        elif job_type == 'transform':
-            result = await _execute_transform_job(db, execution_id, job_config)
-        elif job_type == 'load':
-            result = await _execute_load_job(db, execution_id, job_config)
-        elif job_type == 'full_etl':
-            result = await _execute_full_etl_job(db, execution_id, job_config)
-        else:
-            raise ETLException(f"Unknown job type: {job_type}")
-        
-        # Update execution with results
-        execution.status = 'SUCCESS'
-        execution.end_time = datetime.utcnow()
-        execution.records_processed = result.get('records_processed', 0)
-        execution.records_successful = result.get('records_successful', 0)
-        execution.records_failed = result.get('records_failed', 0)
-        execution.execution_log = json.dumps(result.get('logs', []))
-        
-        # Mark execution as successful
-        execution.status = 'SUCCESS'
-        execution.end_time = datetime.utcnow()
-        # The following lines are redundant if result.get(...) is used above,
-        # and `total_processed` etc. are not defined.
-        # Assuming the intent was to use the values from `result`
-        # and the user provided a partial snippet for the dependent job logic.
-        # Keeping the original `result.get` assignments and adding the new logic.
-        # If `total_processed` etc. were meant to be new variables, they need definition.
-        # For now, I will assume the user wants to keep the existing `result.get` assignments
-        # and add the dependent job triggering.
-        
-        # Update performance metrics
-        performance_metrics = execution.performance_metrics or {}
-        performance_metrics.update(result.get('performance_metrics', {}))
-        execution.performance_metrics = performance_metrics
 
-        db.add(execution)
-        db.commit()
-
-        logger.info(f"ETL job {job_id} completed successfully (Phase 6 complete)")
-
-        # ===== PHASE 7: POST-PROCESSING =====
-        logger.info(f"Starting Phase 7 post-processing for execution {execution_id}")
-
-        post_process_result = {'status': 'failed', 'total_triggered': 0}
-
+    with get_session() as db:
         try:
-            # Execute post-processing phase
-            post_process_result = await post_process_job(
-                db=db,
-                execution_id=execution_id,
+            # Get ETL job
+            job = db.exec(select(EtlJob).where(EtlJob.job_id == job_id)).first()
+            if not job:
+                raise ETLException(f"ETL job not found: {job_id}")
+
+            if not job.is_active:
+                raise ETLException(f"ETL job is not active: {job_id}")
+
+            # Create job execution record
+            execution = JobExecution(
                 job_id=job_id,
-                job_name=job.job_name
+                status='RUNNING',
+                start_time=datetime.utcnow(),
+                execution_log=f"Started by task {task_id}",
+                performance_metrics={'task_id': task_id}
             )
+            db.add(execution)
+            db.commit()
+            db.refresh(execution)
 
-            logger.info(
-                f"Phase 7 post-processing completed: "
-                f"dependent_jobs_triggered={post_process_result.get('dependent_jobs_triggered', 0)}"
-            )
+            if not execution_id:
+                execution_id = str(execution.id)
 
-        except Exception as post_process_error:
-            # Post-processing failures should not block job completion
-            logger.error(
-                f"Phase 7 post-processing failed (non-blocking): {str(post_process_error)}",
-                exc_info=True
-            )
+            # Get job configuration
+            job_config = job.job_config or {}
+            if parameters:
+                job_config.update(parameters)
 
-            # Log the error but continue
-            post_process_result = {
-                'status': 'failed',
-                'error': str(post_process_error),
-                'total_triggered': 0
+            # Execute ETL steps based on job type
+            job_type = job.job_type.lower()
+
+            if job_type == 'extract':
+                result = asyncio.run(_execute_extract_job(db, execution_id, job_config))
+            elif job_type == 'transform':
+                result = asyncio.run(_execute_transform_job(db, execution_id, job_config))
+            elif job_type == 'load':
+                result = asyncio.run(_execute_load_job(db, execution_id, job_config))
+            elif job_type == 'full_etl':
+                result = asyncio.run(_execute_full_etl_job(db, execution_id, job_config))
+            else:
+                raise ETLException(f"Unknown job type: {job_type}")
+
+            # Update execution with results
+            execution.status = 'SUCCESS'
+            execution.end_time = datetime.utcnow()
+            execution.records_processed = result.get('records_processed', 0)
+            execution.records_successful = result.get('records_successful', 0)
+            execution.records_failed = result.get('records_failed', 0)
+            execution.execution_log = json.dumps(result.get('logs', []))
+
+            # Mark execution as successful
+            execution.status = 'SUCCESS'
+            execution.end_time = datetime.utcnow()
+
+            # Update performance metrics
+            performance_metrics = execution.performance_metrics or {}
+            performance_metrics.update(result.get('performance_metrics', {}))
+            execution.performance_metrics = performance_metrics
+
+            db.add(execution)
+            db.commit()
+
+            logger.info(f"ETL job {job_id} completed successfully (Phase 6 complete)")
+
+            # ===== PHASE 7: POST-PROCESSING =====
+            logger.info(f"Starting Phase 7 post-processing for execution {execution_id}")
+
+            post_process_result = {'status': 'failed', 'total_triggered': 0}
+
+            try:
+                # Execute post-processing phase
+                post_process_result = asyncio.run(post_process_job(
+                    db=db,
+                    execution_id=execution_id,
+                    job_id=job_id,
+                    job_name=job.job_name
+                ))
+
+                logger.info(
+                    f"Phase 7 post-processing completed: "
+                    f"dependent_jobs_triggered={post_process_result.get('dependent_jobs_triggered', 0)}"
+                )
+
+            except Exception as post_process_error:
+                # Post-processing failures should not block job completion
+                logger.error(
+                    f"Phase 7 post-processing failed (non-blocking): {str(post_process_error)}",
+                    exc_info=True
+                )
+
+                # Log the error but continue
+                post_process_result = {
+                    'status': 'failed',
+                    'error': str(post_process_error),
+                    'total_triggered': 0
+                }
+
+            return {
+                'status': 'success',
+                'job_id': job_id,
+                'execution_id': execution_id,
+                'task_id': task_id,
+                'result': result,
+                'post_processing': post_process_result,
+                'completed_at': datetime.utcnow().isoformat(),
+                'dependent_jobs_triggered': post_process_result.get('total_triggered', 0)
             }
 
-        return {
-            'status': 'success',
-            'job_id': job_id,
-            'execution_id': execution_id,
-            'task_id': task_id,
-            'result': result,
-            'post_processing': post_process_result,
-            'completed_at': datetime.utcnow().isoformat(),
-            'dependent_jobs_triggered': post_process_result.get('total_triggered', 0)
-        }
-        
-    except Exception as e:
-        logger.error(f"ETL job execution failed for job {job_id}: {str(e)}")
-        
-        # Update execution status
-        try:
-            if 'execution' in locals():
-                execution.status = 'FAILED'
-                execution.end_time = datetime.utcnow()
-                execution.execution_log = str(e)
-                error_details = {
-                    'error_type': type(e).__name__,
-                    'error_message': str(e),
-                    'task_id': task_id
-                }
-                execution.error_details = error_details
-                db.add(execution)
-                db.commit()
-                
-                # Publish job failed event
-                try:
-                    publisher = asyncio.run(get_event_publisher())
-                    asyncio.run(publisher.publish_job_failed(
-                        job_id=job.job_id if 'job' in locals() else job_id,
-                        execution_id=execution.execution_id,
-                        job_name=job.job_name if 'job' in locals() else "Unknown",
-                        error=str(e)
-                    ))
-                except Exception as pub_error:
-                    logger.warning(f"Failed to publish job failed event: {str(pub_error)}")
-                    
-        except Exception as commit_error:
-            logger.error(f"Failed to update execution status: {commit_error}")
-        
-        # Log error to database
-        try:
-            from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
-            from app.infrastructure.db.models.etl_control.error_logs import ErrorType
-            
-            asyncio.run(log_task_error(
-                db=db,
-                exception=e,
-                error_type=get_error_type_from_exception(e),
-                error_severity=get_error_severity_from_exception(e),
-                context={
-                    "job_id": job_id,
-                    "execution_id": execution_id if 'execution_id' in locals() else None,
-                    "task_id": task_id
-                }
-            ))
-        except Exception as log_error:
-            logger.error(f"Failed to log error to database: {log_error}")
-        
-        # Retry if retries available
-        if self.request.retries < self.max_retries:
-            logger.info(f"Retrying ETL job execution for {job_id}")
-            raise self.retry(exc=e, countdown=self.default_retry_delay)
-        
-        raise ETLException(f"ETL job execution failed: {str(e)}")
-    
-    finally:
-        db.close()
+        except Exception as e:
+            logger.error(f"ETL job execution failed for job {job_id}: {str(e)}")
+
+            # Update execution status
+            try:
+                if 'execution' in locals():
+                    execution.status = 'FAILED'
+                    execution.end_time = datetime.utcnow()
+                    execution.execution_log = str(e)
+                    error_details = {
+                        'error_type': type(e).__name__,
+                        'error_message': str(e),
+                        'task_id': task_id
+                    }
+                    execution.error_details = error_details
+                    db.add(execution)
+                    db.commit()
+
+                    # Publish job failed event
+                    try:
+                        publisher = asyncio.run(get_event_publisher())
+                        asyncio.run(publisher.publish_job_failed(
+                            job_id=job.job_id if 'job' in locals() else job_id,
+                            execution_id=str(execution.id) if 'execution' in locals() else None,
+                            job_name=job.job_name if 'job' in locals() else "Unknown",
+                            error=str(e)
+                        ))
+                    except Exception as pub_error:
+                        logger.warning(f"Failed to publish job failed event: {str(pub_error)}")
+
+            except Exception as commit_error:
+                logger.error(f"Failed to update execution status: {commit_error}")
+
+            # Log error to database
+            try:
+                from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+                from app.infrastructure.db.models.etl_control.error_logs import ErrorType
+
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=get_error_type_from_exception(e),
+                    error_severity=get_error_severity_from_exception(e),
+                    context={
+                        "job_id": job_id,
+                        "execution_id": execution_id if 'execution_id' in locals() else None,
+                        "task_id": task_id
+                    }
+                ))
+            except Exception as log_error:
+                logger.error(f"Failed to log error to database: {log_error}")
+
+            # Retry if retries available
+            if self.request.retries < self.max_retries:
+                logger.info(f"Retrying ETL job execution for {job_id}")
+                raise self.retry(exc=e, countdown=self.default_retry_delay)
+
+            raise ETLException(f"ETL job execution failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
@@ -556,338 +545,326 @@ async def execute_etl_job(self, job_id: str, execution_parameters: Dict[str, Any
     default_retry_delay=300,
     time_limit=1800
 )
-async def validate_data_quality(self, entity_type: str = None, validation_config: Dict[str, Any] = None):
+def validate_data_quality(self, entity_type: str = None, validation_config: Dict[str, Any] = None):
     """
     Run data quality validation
-    
+
     Args:
         entity_type: Type of entity to validate
         validation_config: Validation configuration
-        
+
     Returns:
         Data quality results
     """
     task_id = self.request.id
     logger.info(f"Starting data quality validation task {task_id}")
-    
-    db = next(get_db())
-    try:
-        quality_service = DataQualityService(db)
-        
-        # Run quality checks
-        if entity_type:
-            results = await quality_service.run_quality_check(entity_type=entity_type, check_config=validation_config)
-        else:
-            # Run all active quality rules
-            results = await quality_service.run_all_quality_checks()
-        
-        # Generate quality report
-        report = await quality_service.generate_quality_report(entity_type)
-        
-        logger.info(f"Data quality validation completed with {len(results)} checks")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'validation_results': results,
-            'quality_report': report,
-            'completed_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Data quality validation failed: {str(e)}")
-        
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=self.default_retry_delay)
-        
-        raise ETLException(f"Data quality validation failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+    with get_session() as db:
+        try:
+            quality_service = DataQualityService(db)
+
+            # Run quality checks
+            if entity_type:
+                results = asyncio.run(quality_service.run_quality_check(entity_type=entity_type, check_config=validation_config))
+            else:
+                # Run all active quality rules
+                results = asyncio.run(quality_service.run_all_quality_checks())
+
+            # Generate quality report
+            report = asyncio.run(quality_service.generate_quality_report(entity_type))
+
+            logger.info(f"Data quality validation completed with {len(results)} checks")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'validation_results': results,
+                'quality_report': report,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Data quality validation failed: {str(e)}")
+
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=e, countdown=self.default_retry_delay)
+
+            raise ETLException(f"Data quality validation failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
-    name='etl.generate_lineage',
+    name='app.tasks.etl_tasks.generate_lineage',
     max_retries=1,
     time_limit=900
 )
 def generate_data_lineage(self, source_entity: str = None, target_entity: str = None):
     """
     Generate data lineage information
-    
+
     Args:
         source_entity: Source entity name
         target_entity: Target entity name
-        
+
     Returns:
         Data lineage information
     """
     task_id = self.request.id
     logger.info(f"Starting data lineage generation task {task_id}")
-    
-    db = next(get_db())
-    try:
-        # Build lineage query
-        lineage_query = select(DataLineage)
-        
-        if source_entity:
-            lineage_query = lineage_query.where(DataLineage.source_entity == source_entity)
-        if target_entity:
-            lineage_query = lineage_query.where(DataLineage.target_entity == target_entity)
-        
-        # Get lineage records
-        lineage_records = db.exec(lineage_query).all()
-        
-        # Build lineage graph
-        lineage_graph = {
-            'nodes': set(),
-            'edges': [],
-            'transformations': {}
-        }
-        
-        for record in lineage_records:
-            # Add nodes
-            lineage_graph['nodes'].add(f"{record.source_entity}.{record.source_field}")
-            lineage_graph['nodes'].add(f"{record.target_entity}.{record.target_field}")
-            
-            # Add edge
-            edge = {
-                'source': f"{record.source_entity}.{record.source_field}",
-                'target': f"{record.target_entity}.{record.target_field}",
-                'transformation': record.transformation_applied,
-                'execution_id': record.execution_id
+
+    with get_session() as db:
+        try:
+            # Build lineage query
+            lineage_query = select(DataLineage)
+
+            if source_entity:
+                lineage_query = lineage_query.where(DataLineage.source_entity == source_entity)
+            if target_entity:
+                lineage_query = lineage_query.where(DataLineage.target_entity == target_entity)
+
+            # Get lineage records
+            lineage_records = db.exec(lineage_query).all()
+
+            # Build lineage graph
+            lineage_graph = {
+                'nodes': set(),
+                'edges': [],
+                'transformations': {}
             }
-            lineage_graph['edges'].append(edge)
-            
-            # Store transformation details
-            key = f"{edge['source']} -> {edge['target']}"
-            lineage_graph['transformations'][key] = record.transformation_applied
-        
-        # Convert set to list for JSON serialization
-        lineage_graph['nodes'] = list(lineage_graph['nodes'])
-        
-        logger.info(f"Data lineage generation completed with {len(lineage_graph['edges'])} relationships")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'lineage_graph': lineage_graph,
-            'total_relationships': len(lineage_graph['edges']),
-            'completed_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Data lineage generation failed: {str(e)}")
-        
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=e, countdown=self.default_retry_delay)
-        
-        raise ETLException(f"Data lineage generation failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+            for record in lineage_records:
+                # Add nodes
+                lineage_graph['nodes'].add(f"{record.source_entity}.{record.source_field}")
+                lineage_graph['nodes'].add(f"{record.target_entity}.{record.target_field}")
+
+                # Add edge
+                edge = {
+                    'source': f"{record.source_entity}.{record.source_field}",
+                    'target': f"{record.target_entity}.{record.target_field}",
+                    'transformation': record.transformation_applied,
+                    'execution_id': record.execution_id
+                }
+                lineage_graph['edges'].append(edge)
+
+                # Store transformation details
+                key = f"{edge['source']} -> {edge['target']}"
+                lineage_graph['transformations'][key] = record.transformation_applied
+
+            # Convert set to list for JSON serialization
+            lineage_graph['nodes'] = list(lineage_graph['nodes'])
+
+            logger.info(f"Data lineage generation completed with {len(lineage_graph['edges'])} relationships")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'lineage_graph': lineage_graph,
+                'total_relationships': len(lineage_graph['edges']),
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Data lineage generation failed: {str(e)}")
+
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=e, countdown=self.default_retry_delay)
+
+            raise ETLException(f"Data lineage generation failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
-    name='etl.cleanup_files',
+    name='app.tasks.etl_tasks.cleanup_files',
     time_limit=1800
 )
 def cleanup_old_files(self, days_old: int = 30, file_types: List[str] = None):
     """
     Clean up old processed files
-    
+
     Args:
         days_old: Number of days old files to clean up
         file_types: List of file types to clean up
-        
+
     Returns:
         Cleanup results
     """
     task_id = self.request.id
     logger.info(f"Starting file cleanup task {task_id}")
-    
-    db = next(get_db())
-    try:
-        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
-        
-        # Build query for old files
-        query = select(FileRegistry).where(
-            FileRegistry.upload_date < cutoff_date,
-            FileRegistry.processing_status == 'COMPLETED'
-        )
-        
-        if file_types:
-            query = query.where(FileRegistry.file_type.in_(file_types))
-        
-        old_files = db.exec(query).all()
-        
-        cleanup_results = {
-            'files_processed': 0,
-            'files_deleted': 0,
-            'space_freed': 0,
-            'errors': []
-        }
-        
-        for file_record in old_files:
-            try:
-                cleanup_results['files_processed'] += 1
-                
-                # Get file size before deletion
-                if os.path.exists(file_record.file_path):
-                    file_size = os.path.getsize(file_record.file_path)
-                    
-                    # Delete physical file
-                    os.remove(file_record.file_path)
-                    cleanup_results['files_deleted'] += 1
-                    cleanup_results['space_freed'] += file_size
-                    
-                    logger.debug(f"Deleted file: {file_record.file_path}")
-                
-                # Update database record
-                file_record.processing_status = 'ARCHIVED'
-                file_record.file_path = None  # Clear file path since file is deleted
-                db.add(file_record)
-                
-            except Exception as e:
-                error_msg = f"Failed to delete file {file_record.id}: {str(e)}"
-                cleanup_results['errors'].append(error_msg)
-                logger.warning(error_msg)
-        
-        db.commit()
-        
-        # Convert bytes to MB for reporting
-        space_freed_mb = cleanup_results['space_freed'] / (1024 * 1024)
-        
-        logger.info(f"File cleanup completed: {cleanup_results['files_deleted']} files deleted, {space_freed_mb:.2f} MB freed")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'cleanup_results': cleanup_results,
-            'space_freed_mb': space_freed_mb,
-            'completed_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"File cleanup failed: {str(e)}")
-        raise ETLException(f"File cleanup failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+    with get_session() as db:
+        try:
+            cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+
+            # Build query for old files
+            query = select(FileRegistry).where(
+                FileRegistry.upload_date < cutoff_date,
+                FileRegistry.processing_status == 'COMPLETED'
+            )
+
+            if file_types:
+                query = query.where(FileRegistry.file_type.in_(file_types))
+
+            old_files = db.exec(query).all()
+
+            cleanup_results = {
+                'files_processed': 0,
+                'files_deleted': 0,
+                'space_freed': 0,
+                'errors': []
+            }
+
+            for file_record in old_files:
+                try:
+                    cleanup_results['files_processed'] += 1
+
+                    # Get file size before deletion
+                    if os.path.exists(file_record.file_path):
+                        file_size = os.path.getsize(file_record.file_path)
+
+                        # Delete physical file
+                        os.remove(file_record.file_path)
+                        cleanup_results['files_deleted'] += 1
+                        cleanup_results['space_freed'] += file_size
+
+                        logger.debug(f"Deleted file: {file_record.file_path}")
+
+                    # Update database record
+                    file_record.processing_status = 'ARCHIVED'
+                    file_record.file_path = None  # Clear file path since file is deleted
+                    db.add(file_record)
+
+                except Exception as e:
+                    error_msg = f"Failed to delete file {file_record.id}: {str(e)}"
+                    cleanup_results['errors'].append(error_msg)
+                    logger.warning(error_msg)
+
+            db.commit()
+
+            # Convert bytes to MB for reporting
+            space_freed_mb = cleanup_results['space_freed'] / (1024 * 1024)
+
+            logger.info(f"File cleanup completed: {cleanup_results['files_deleted']} files deleted, {space_freed_mb:.2f} MB freed")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'cleanup_results': cleanup_results,
+                'space_freed_mb': space_freed_mb,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"File cleanup failed: {str(e)}")
+            raise ETLException(f"File cleanup failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
-    name='etl.backup_data',
+    name='app.tasks.etl_tasks.backup_data',
     time_limit=3600
 )
 def backup_processed_data(self, backup_config: Dict[str, Any] = None):
     """
     Backup processed data
-    
+
     Args:
         backup_config: Backup configuration
-        
+
     Returns:
         Backup results
     """
     task_id = self.request.id
     logger.info(f"Starting data backup task {task_id}")
-    
-    db = next(get_db())
-    try:
-        # Default backup configuration
-        config = {
-            'backup_path': '/app/storage/backups',
-            'include_tables': ['processed.entities', 'processed.aggregated_data'],
-            'format': 'json',  # json, csv, sql
-            'compress': True
-        }
-        
-        if backup_config:
-            config.update(backup_config)
-        
-        backup_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        backup_dir = Path(config['backup_path']) / f"backup_{backup_timestamp}"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        
-        backup_results = {
-            'tables_backed_up': 0,
-            'total_records': 0,
-            'backup_size': 0,
-            'backup_path': str(backup_dir),
-            'files_created': []
-        }
-        
-        for table_name in config['include_tables']:
-            try:
-                # Query data from table
-                query = f"SELECT * FROM {table_name}"
-                df = pd.read_sql(query, db.connection())
-                
-                if df.empty:
-                    logger.warning(f"No data found in table {table_name}")
+
+    with get_session() as db:
+        try:
+            # Default backup configuration
+            config = {
+                'backup_path': '/app/storage/backups',
+                'include_tables': ['processed.entities', 'processed.aggregated_data'],
+                'format': 'json',  # json, csv, sql
+                'compress': True
+            }
+
+            if backup_config:
+                config.update(backup_config)
+
+            backup_timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            backup_dir = Path(config['backup_path']) / f"backup_{backup_timestamp}"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            backup_results = {
+                'tables_backed_up': 0,
+                'total_records': 0,
+                'backup_size': 0,
+                'backup_path': str(backup_dir),
+                'files_created': []
+            }
+
+            for table_name in config['include_tables']:
+                try:
+                    # Query data from table
+                    query = f"SELECT * FROM {table_name}"
+                    df = pd.read_sql(query, db.connection())
+
+                    if df.empty:
+                        logger.warning(f"No data found in table {table_name}")
+                        continue
+
+                    # Generate backup file
+                    safe_table_name = table_name.replace('.', '_')
+
+                    if config['format'] == 'json':
+                        backup_file = backup_dir / f"{safe_table_name}.json"
+                        df.to_json(backup_file, orient='records', date_format='iso')
+                    elif config['format'] == 'csv':
+                        backup_file = backup_dir / f"{safe_table_name}.csv"
+                        df.to_csv(backup_file, index=False)
+                    elif config['format'] == 'sql':
+                        backup_file = backup_dir / f"{safe_table_name}.sql"
+                        # This would need more sophisticated SQL generation
+                        df.to_sql(safe_table_name, db.connection(), if_exists='replace', index=False)
+
+                    backup_results['tables_backed_up'] += 1
+                    backup_results['total_records'] += len(df)
+                    backup_results['files_created'].append(str(backup_file))
+
+                    logger.debug(f"Backed up table {table_name}: {len(df)} records")
+
+                except Exception as e:
+                    logger.error(f"Failed to backup table {table_name}: {str(e)}")
                     continue
-                
-                # Generate backup file
-                safe_table_name = table_name.replace('.', '_')
-                
-                if config['format'] == 'json':
-                    backup_file = backup_dir / f"{safe_table_name}.json"
-                    df.to_json(backup_file, orient='records', date_format='iso')
-                elif config['format'] == 'csv':
-                    backup_file = backup_dir / f"{safe_table_name}.csv"
-                    df.to_csv(backup_file, index=False)
-                elif config['format'] == 'sql':
-                    backup_file = backup_dir / f"{safe_table_name}.sql"
-                    # This would need more sophisticated SQL generation
-                    df.to_sql(safe_table_name, db.connection(), if_exists='replace', index=False)
-                
-                backup_results['tables_backed_up'] += 1
-                backup_results['total_records'] += len(df)
-                backup_results['files_created'].append(str(backup_file))
-                
-                logger.debug(f"Backed up table {table_name}: {len(df)} records")
-                
-            except Exception as e:
-                logger.error(f"Failed to backup table {table_name}: {str(e)}")
-                continue
-        
-        # Compress backup if requested
-        if config['compress']:
-            import tarfile
-            
-            archive_path = backup_dir.parent / f"backup_{backup_timestamp}.tar.gz"
-            with tarfile.open(archive_path, 'w:gz') as tar:
-                tar.add(backup_dir, arcname=f"backup_{backup_timestamp}")
-            
-            # Remove uncompressed directory
-            shutil.rmtree(backup_dir)
-            
-            backup_results['backup_path'] = str(archive_path)
-            backup_results['compressed'] = True
-        
-        # Calculate backup size
-        if Path(backup_results['backup_path']).exists():
-            backup_results['backup_size'] = os.path.getsize(backup_results['backup_path'])
-        
-        backup_size_mb = backup_results['backup_size'] / (1024 * 1024)
-        
-        logger.info(f"Data backup completed: {backup_results['tables_backed_up']} tables, {backup_size_mb:.2f} MB")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'backup_results': backup_results,
-            'backup_size_mb': backup_size_mb,
-            'completed_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Data backup failed: {str(e)}")
-        raise ETLException(f"Data backup failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+            # Compress backup if requested
+            if config['compress']:
+                import tarfile
+
+                archive_path = backup_dir.parent / f"backup_{backup_timestamp}.tar.gz"
+                with tarfile.open(archive_path, 'w:gz') as tar:
+                    tar.add(backup_dir, arcname=f"backup_{backup_timestamp}")
+
+                # Remove uncompressed directory
+                shutil.rmtree(backup_dir)
+
+                backup_results['backup_path'] = str(archive_path)
+                backup_results['compressed'] = True
+
+            # Calculate backup size
+            if Path(backup_results['backup_path']).exists():
+                backup_results['backup_size'] = os.path.getsize(backup_results['backup_path'])
+
+            backup_size_mb = backup_results['backup_size'] / (1024 * 1024)
+
+            logger.info(f"Data backup completed: {backup_results['tables_backed_up']} tables, {backup_size_mb:.2f} MB")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'backup_results': backup_results,
+                'backup_size_mb': backup_size_mb,
+                'completed_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Data backup failed: {str(e)}")
+            raise ETLException(f"Data backup failed: {str(e)}")
 
 # ==============================================
 # PHASE 5: Transform Records
@@ -998,7 +975,7 @@ async def transform_records(
         field_mapping_service = FieldMappingService(db, job_id)
 
         # Fetch field mappings for this job
-        field_mappings_query = select(FieldMapping)
+        field_mappings_query = select(FieldMapping).where(FieldMapping.job_id == job_id)
         field_mappings = db.exec(field_mappings_query).all()
         logger.debug(f"[PHASE 5] Loaded {len(field_mappings)} field mappings")
 
@@ -1088,7 +1065,8 @@ async def transform_records(
                         transformation_rules_applied=[
                             f"{m.mapping_type}:{m.target_field}" for m in field_mappings[:5]  # Sample
                         ],
-                        batch_id=execution_id
+                        batch_id=execution_id,
+                        validation_status='passed'
                     )
 
                     # Create StandardizedData model instance
@@ -1109,8 +1087,8 @@ async def transform_records(
                         )
                         db.add(quality_check)
 
-                    # Keep validation status as is (already VALID or UNVALIDATED)
-                    # The record is now considered "processed" since it's in standardized_data
+                    # Mark raw record as processed
+                    raw_record.validation_status = ValidationStatus.VALID
                     db.add(raw_record)
 
                     records_successful += 1
@@ -1217,13 +1195,13 @@ async def _execute_extract_job(db: Session, execution_id: str, config: Dict[str,
     
     if source_type == 'file':
         # File-based extraction
-        file_paths = config.get('file_paths', [])
+        file_ids = config.get('file_ids', [])
         results = []
-        
-        for file_path in file_paths:
+
+        for file_id in file_ids:
             # Process each file
-            file_result = await process_file_task.apply_async(
-                args=[file_path, config]
+            file_result = process_file_task.apply_async(
+                args=[file_id, None, config]
             ).get()
             results.append(file_result)
         
@@ -1415,9 +1393,8 @@ async def load_records(
         entity_service = EntityService(db)
         entity_matcher = EntityMatcher(db, execution_id, **load_config)
 
-        # Step 2: BEGIN TRANSACTION with explicit savepoint
-        logger.debug(f"[PHASE 6] Beginning transaction")
-        transaction = db.begin_nested()
+        # Step 2: Process records with individual commits for atomic operations
+        logger.debug(f"[PHASE 6] Starting record processing")
 
         # Step 3: Process each standardized record
         for std_record in standardized_records:
@@ -1602,14 +1579,11 @@ async def load_records(
                 errors.append(error_msg)
                 continue
 
-        # Step 4: COMMIT TRANSACTION
+        # Step 4: Finalize load
         logger.info(
             f"[PHASE 6] Load complete: {records_loaded} loaded, "
             f"{records_duplicated} duplicated, {records_merged} merged out of {records_processed}"
         )
-
-        # Commit the transaction
-        transaction.commit()
 
         # Step 5: Update job execution counters
         execution.records_loaded = records_loaded
@@ -1816,109 +1790,103 @@ async def _execute_full_etl_job(db: Session, execution_id: str, config: Dict[str
     name='etl.validate_file_format',
     time_limit=300
 )
-async def validate_file_format_task(self, file_id: str):
+def validate_file_format_task(self, file_id: str):
     """
     Validate file format before processing
-    
+
     Args:
         file_id: ID of the file to validate
-        
+
     Returns:
         Validation results
     """
     task_id = self.request.id
     logger.info(f"Starting file format validation task {task_id} for file {file_id}")
-    
-    db = next(get_db())
-    try:
-        # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
-        if not file_record:
-            raise FileProcessingException(f"File record not found: {file_id}")
-        
-        # Get appropriate processor
-        file_type = file_record.file_type.lower()
-        processor = get_processor(file_type, db_session=db)
-        
-        # Validate file format
-        is_valid, error_message = await processor.validate_file_format(file_record.file_path)
-        
-        # Update file metadata
-        metadata = file_record.file_metadata or {}
-        metadata.update({
-            'format_validated': True,
-            'format_valid': is_valid,
-            'validation_error': error_message if not is_valid else None,
-            'validated_at': datetime.utcnow().isoformat(),
-            'validation_task_id': task_id
-        })
-        file_record.file_metadata = metadata
-        db.add(file_record)
-        db.commit()
-        
-        return {
-            'status': 'success',
-            'file_id': file_id,
-            'is_valid': is_valid,
-            'error_message': error_message,
-            'task_id': task_id,
-            'validated_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"File format validation failed for {file_id}: {str(e)}")
-        raise FileProcessingException(f"File format validation failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+    with get_session() as db:
+        try:
+            # Get file record
+            file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
+            if not file_record:
+                raise FileProcessingException(f"File record not found: {file_id}")
+
+            # Get appropriate processor
+            file_type = file_record.file_type.lower()
+            processor = get_processor(file_type, db_session=db)
+
+            # Validate file format
+            is_valid, error_message = asyncio.run(processor.validate_file_format(file_record.file_path))
+
+            # Update file metadata
+            metadata = file_record.file_metadata or {}
+            metadata.update({
+                'format_validated': True,
+                'format_valid': is_valid,
+                'validation_error': error_message if not is_valid else None,
+                'validated_at': datetime.utcnow().isoformat(),
+                'validation_task_id': task_id
+            })
+            file_record.file_metadata = metadata
+            db.add(file_record)
+            db.commit()
+
+            return {
+                'status': 'success',
+                'file_id': file_id,
+                'is_valid': is_valid,
+                'error_message': error_message,
+                'task_id': task_id,
+                'validated_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"File format validation failed for {file_id}: {str(e)}")
+            raise FileProcessingException(f"File format validation failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
     name='etl.preview_file_data',
     time_limit=600
 )
-async def preview_file_data_task(self, file_id: str, rows: int = 10):
+def preview_file_data_task(self, file_id: str, rows: int = 10):
     """
     Generate preview of file data
-    
+
     Args:
         file_id: ID of the file to preview
         rows: Number of rows to preview
-        
+
     Returns:
         File preview data
     """
     task_id = self.request.id
     logger.info(f"Starting file preview task {task_id} for file {file_id}")
-    
-    db = next(get_db())
-    try:
-        # Get file record
-        file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
-        if not file_record:
-            raise FileProcessingException(f"File record not found: {file_id}")
-        
-        # Get appropriate processor
-        file_type = file_record.file_type.lower()
-        processor = get_processor(file_type, db_session=db)
-        
-        # Generate preview
-        preview_data = await processor.preview_data(file_record.file_path, rows)
-        
-        return {
-            'status': 'success',
-            'file_id': file_id,
-            'preview_data': preview_data,
-            'task_id': task_id,
-            'generated_at': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"File preview failed for {file_id}: {str(e)}")
-        raise FileProcessingException(f"File preview failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+    with get_session() as db:
+        try:
+            # Get file record
+            file_record = db.exec(select(FileRegistry).where(FileRegistry.id == file_id)).first()
+            if not file_record:
+                raise FileProcessingException(f"File record not found: {file_id}")
+
+            # Get appropriate processor
+            file_type = file_record.file_type.lower()
+            processor = get_processor(file_type, db_session=db)
+
+            # Generate preview
+            preview_data = asyncio.run(processor.preview_data(file_record.file_path, rows))
+
+            return {
+                'status': 'success',
+                'file_id': file_id,
+                'preview_data': preview_data,
+                'task_id': task_id,
+                'generated_at': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"File preview failed for {file_id}: {str(e)}")
+            raise FileProcessingException(f"File preview failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
@@ -2153,7 +2121,6 @@ async def post_process_job(
     from app.application.services.data_quality_service import DataQualityService
     from app.application.services.notification_service import NotificationService
     from app.application.services.job_orchestration_service import JobOrchestrationService
-    from app.infrastructure.cache.memory_cache import MemoryCache
     from app.utils.event_publisher import get_event_publisher
     import psutil
     import os
@@ -2231,7 +2198,7 @@ async def post_process_job(
 
         try:
             performance_metric = PerformanceMetric(
-                execution_id=execution.execution_id,
+                execution_id=execution.id,
                 records_per_second=records_per_second,
                 memory_usage_mb=memory_usage_mb,
                 cpu_usage_percent=0.0,  # Future: get from psutil
@@ -2276,7 +2243,7 @@ async def post_process_job(
             # Query quality check results for this execution
             quality_checks = db.exec(
                 select(QualityCheckResult).where(
-                    QualityCheckResult.execution_id == execution.execution_id
+                    QualityCheckResult.execution_id == execution.id
                 )
             ).all()
 
@@ -2349,7 +2316,7 @@ async def post_process_job(
 
             dependent_jobs_result = await orchestration_service.trigger_dependent_jobs(
                 parent_job_id=job_id,
-                parent_execution_id=execution.execution_id,
+                parent_execution_id=execution.id,
                 parent_status="SUCCESS" if execution.status == "SUCCESS" else "FAILURE"
             )
 
@@ -2432,35 +2399,37 @@ async def post_process_job(
         logger.debug(f"[PHASE 7] Updating cache")
 
         try:
-            # Initialize cache manager
-            cache_manager = MemoryCache(max_size=10000)
+            # Get shared cache manager
+            cache = await cache_manager.get_cache()
+            if not cache:
+                logger.warning("[PHASE 7] No cache available, skipping cache update")
+            else:
+                # Delete job cache
+                cache_key_job = f"job:{job_id}"
+                await cache.delete(cache_key_job)
+                logger.debug(f"[PHASE 7] Cache deleted: {cache_key_job}")
 
-            # Delete job cache
-            cache_key_job = f"job:{job_id}"
-            await cache_manager.delete(cache_key_job)
-            logger.debug(f"[PHASE 7] Cache deleted: {cache_key_job}")
+                # Set execution summary cache with 1-hour TTL
+                cache_key_exec = f"execution:{execution_id}:summary"
+                execution_summary = {
+                    "job_id": str(job_id),
+                    "job_name": job_name,
+                    "status": execution.status,
+                    "duration_seconds": duration_seconds,
+                    "performance": performance_data,
+                    "quality": quality_data,
+                    "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+                    "dependent_jobs_triggered": dependent_jobs_result["total_triggered"]
+                }
 
-            # Set execution summary cache with 1-hour TTL
-            cache_key_exec = f"execution:{execution_id}:summary"
-            execution_summary = {
-                "job_id": str(job_id),
-                "job_name": job_name,
-                "status": execution.status,
-                "duration_seconds": duration_seconds,
-                "performance": performance_data,
-                "quality": quality_data,
-                "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
-                "dependent_jobs_triggered": dependent_jobs_result["total_triggered"]
-            }
+                await cache.set(
+                    cache_key_exec,
+                    execution_summary,
+                    ttl=3600  # 1 hour
+                )
 
-            await cache_manager.set(
-                cache_key_exec,
-                execution_summary,
-                ttl=3600  # 1 hour
-            )
-
-            logger.debug(f"[PHASE 7] Cache set: {cache_key_exec} (TTL=3600s)")
-            logs.append(f"Cache updated: execution summary cached for 1 hour")
+                logger.debug(f"[PHASE 7] Cache set: {cache_key_exec} (TTL=3600s)")
+                logs.append(f"Cache updated: execution summary cached for 1 hour")
 
         except Exception as cache_error:
             logger.warning(f"[PHASE 7] Failed to update cache: {str(cache_error)}")

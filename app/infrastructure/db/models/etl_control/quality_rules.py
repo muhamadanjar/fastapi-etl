@@ -19,6 +19,12 @@ class QualityRuleBase(BaseModel):
     rule_expression: str = Field(description="SQL expression atau rule logic")
     error_threshold: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     is_active: bool = Field(default=True, index=True)
+    job_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="etl_control.etl_jobs.id",
+        index=True,
+        description="ETL job this rule belongs to"
+    )
 
 
 class QualityRule(QualityRuleBase, table=True):
@@ -61,6 +67,7 @@ class QualityRuleUpdate(SQLModel):
     rule_expression: Optional[str] = Field(default=None)
     error_threshold: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     is_active: Optional[bool] = Field(default=None)
+    job_id: Optional[UUID] = Field(default=None)
 
 
 class QualityRuleRead(QualityRuleBase):

@@ -203,7 +203,7 @@ class ETLService(BaseService):
 
             self.handle_error(e, "create_etl_job")
     
-    async def execute_job(self, job_id: UUID, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute_job(self, job_id: UUID, user_id=None, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute an ETL job."""
         try:
             from app.tasks.etl_tasks import execute_etl_job
@@ -243,7 +243,7 @@ class ETLService(BaseService):
                 records_processed=0,
                 records_successful=0,
                 records_failed=0,
-                execution_metadata=parameters or {}
+                performance_metrics={"parameters": parameters} if parameters else {}
             )
             
             self.db.add(execution)
@@ -296,7 +296,193 @@ class ETLService(BaseService):
                 self.logger.warning(f"Failed to publish job failed event: {str(pub_error)}")
             
             self.handle_error(e, "execute_job")
-    
+
+    async def get_job_executions(
+        self,
+        job_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        status: str = None,
+    ) -> List[Dict[str, Any]]:
+        """Get execution history for a job with optional status filter."""
+        try:
+            self.log_operation("get_job_executions", {"job_id": job_id, "skip": skip, "limit": limit, "status": status})
+
+            conditions = [JobExecution.job_id == job_id]
+            if status is not None:
+                conditions.append(JobExecution.status == status)
+
+            stmt = (
+                select(JobExecution)
+                .where(and_(*conditions))
+                .order_by(JobExecution.created_at.desc())
+                .offset(skip)
+                .limit(limit)
+            )
+            executions = self.db.execute(stmt).scalars().all()
+
+            return [
+                {
+                    "execution_id": str(ex.id),
+                    "job_id": str(ex.job_id),
+                    "status": ex.status,
+                    "start_time": ex.start_time.isoformat() if ex.start_time else None,
+                    "end_time": ex.end_time.isoformat() if ex.end_time else None,
+                    "records_processed": ex.records_processed,
+                    "records_successful": ex.records_successful,
+                    "records_failed": ex.records_failed,
+                    "batch_id": ex.batch_id,
+                    "created_at": ex.created_at.isoformat() if ex.created_at else None,
+                }
+                for ex in executions
+            ]
+
+        except Exception as e:
+            self.handle_error(e, "get_job_executions")
+
+    async def stop_job_execution(
+        self,
+        job_id: UUID,
+        execution_id: UUID = None,
+        user_id=None,
+    ) -> bool:
+        """Stop running execution(s) for a job, optionally targeting a specific execution."""
+        try:
+            self.log_operation("stop_job_execution", {"job_id": job_id, "execution_id": execution_id})
+
+            conditions = [
+                JobExecution.job_id == job_id,
+                JobExecution.status == JobStatus.RUNNING.value,
+            ]
+            if execution_id is not None:
+                conditions.append(JobExecution.id == execution_id)
+
+            stmt = select(JobExecution).where(and_(*conditions))
+            executions = self.db.execute(stmt).scalars().all()
+
+            if not executions:
+                raise ETLError("No running execution found for the given job")
+
+            now = get_current_timestamp()
+            for ex in executions:
+                ex.status = JobStatus.CANCELLED.value
+                ex.end_time = now
+
+            self.db.commit()
+            return True
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "stop_job_execution")
+
+    async def restart_job_execution(
+        self,
+        job_id: UUID,
+        execution_id: UUID,
+        user_id=None,
+    ) -> UUID:
+        """Create a new execution that restarts a previously completed or failed one."""
+        try:
+            from app.tasks.etl_tasks import execute_etl_job
+
+            self.log_operation("restart_job_execution", {"job_id": job_id, "execution_id": execution_id})
+
+            # Validate the original execution exists and belongs to this job
+            old_execution = self.db.execute(
+                select(JobExecution).where(
+                    and_(
+                        JobExecution.id == execution_id,
+                        JobExecution.job_id == job_id,
+                    )
+                )
+            ).scalars().first()
+
+            if not old_execution:
+                raise ETLError("Execution not found for the given job")
+
+            if old_execution.status == JobStatus.RUNNING.value:
+                raise ETLError("Cannot restart a currently running execution")
+
+            batch_id = self._generate_batch_id()
+
+            new_execution = JobExecution(
+                job_id=job_id,
+                batch_id=batch_id,
+                start_time=get_current_timestamp(),
+                status=JobStatus.RUNNING.value,
+                records_processed=0,
+                records_successful=0,
+                records_failed=0,
+                performance_metrics={"restarted_from": str(execution_id)},
+            )
+            self.db.add(new_execution)
+            self.db.commit()
+            self.db.refresh(new_execution)
+
+            execute_etl_job.delay(
+                str(job_id),
+                str(new_execution.id),
+                batch_id,
+                {},
+            )
+
+            return new_execution.id
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "restart_job_execution")
+
+    async def schedule_job(
+        self,
+        job_id: UUID,
+        schedule_data,
+        user_id=None,
+    ) -> Dict[str, Any]:
+        """Set or update the cron schedule expression for a job."""
+        try:
+            self.log_operation("schedule_job", {"job_id": job_id})
+
+            job = self.job_repo.get(job_id)
+            if not job:
+                raise ETLError("Job not found")
+
+            cron_expression = schedule_data.cron_expression
+            job.schedule_expression = cron_expression
+            job.is_active = getattr(schedule_data, "is_active", True) or True
+
+            self.db.commit()
+
+            return {
+                "job_id": str(job.id),
+                "schedule_expression": job.schedule_expression,
+                "is_active": job.is_active,
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "schedule_job")
+
+    async def unschedule_job(
+        self,
+        job_id: UUID,
+        user_id=None,
+    ) -> bool:
+        """Remove the cron schedule from a job."""
+        try:
+            self.log_operation("unschedule_job", {"job_id": job_id})
+
+            job = self.job_repo.get(job_id)
+            if not job:
+                raise ETLError("Job not found")
+
+            job.schedule_expression = None
+            self.db.commit()
+            return True
+
+        except Exception as e:
+            self.db.rollback()
+            self.handle_error(e, "unschedule_job")
+
     async def get_job_status(self, job_id: int) -> Dict[str, Any]:
         """Get job status dan recent executions."""
         try:
@@ -568,8 +754,8 @@ class ETLService(BaseService):
         """Calculate success rate from executions."""
         if not executions:
             return 0.0
-        
-        successful = len([e for e in executions if e.status == JobStatus.SUCCESS.value])
+
+        successful = len([e for e in executions if e.status == JobStatus.COMPLETED.value])
         return (successful / len(executions)) * 100
     
     def _calculate_duration(self, start_time: datetime, end_time: datetime) -> Optional[int]:

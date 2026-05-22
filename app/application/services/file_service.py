@@ -272,11 +272,11 @@ class FileService(BaseService):
                     file_id=file_registry.id,
                     headers=[col.column_name for col in columns],
                     sample_data=[{
-                        col.column_name: getattr(record, col.column_name, None)
-                        for col in columns
-                    } for record in raw_records[:10]],  # Preview first 10 records  
+                        # RawRecords stores row values inside `raw_data` (JSON), not as model attributes
+                        col.column_name: (record.raw_data or {}).get(col.column_name) for col in columns
+                    } for record in raw_records[:10]],  # Preview first 20 records
                     total_rows=len(raw_records),
-                    preview_rows=min(10, len(raw_records))  # Limit preview to 10 rows
+                    preview_rows=min(10, len(raw_records))  # Limit preview to 20 rows
                 ),
                 validation_result=FileValidationResult(
                     file_id=file_registry.id,

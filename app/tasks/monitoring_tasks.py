@@ -17,7 +17,7 @@ import pandas as pd
 import requests
 
 from .celery_app import celery_app
-# from app.interfaces.dependencies import get_db
+from app.infrastructure.db.session import get_session
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
@@ -38,16 +38,16 @@ logger = get_logger(__name__)
     time_limit=300,
     soft_time_limit=240
 )
-async def health_check_task(self):
+def health_check_task(self):
     """
     Comprehensive system health check
-    
+
     Returns:
         System health status and metrics
     """
     task_id = self.request.id
     logger.info(f"Starting health check task {task_id}")
-    
+
     health_status = {
         'timestamp': datetime.utcnow().isoformat(),
         'task_id': task_id,
@@ -56,77 +56,74 @@ async def health_check_task(self):
         'metrics': {},
         'alerts': []
     }
-    
-    db = next(get_db())
-    try:
-        # Database health check
-        health_status['components']['database'] = await _check_database_health(db)
-        
-        # System resources check
-        health_status['components']['system'] = await _check_system_resources()
-        
-        # Storage health check
-        health_status['components']['storage'] = await _check_storage_health()
-        
-        # ETL jobs health check
-        health_status['components']['etl_jobs'] = await _check_etl_jobs_health(db)
-        
-        # Celery workers check
-        health_status['components']['celery'] = await _check_celery_health()
-        
-        # External dependencies check
-        health_status['components']['external'] = await _check_external_dependencies()
-        
-        # Aggregate metrics
-        health_status['metrics'] = await _aggregate_health_metrics(health_status['components'])
-        
-        # Determine overall status
-        component_statuses = [comp['status'] for comp in health_status['components'].values()]
-        if 'critical' in component_statuses:
-            health_status['overall_status'] = 'critical'
-        elif 'warning' in component_statuses:
-            health_status['overall_status'] = 'warning'
-        elif 'unhealthy' in component_statuses:
-            health_status['overall_status'] = 'unhealthy'
-        
-        # Generate alerts for issues
-        for component_name, component_data in health_status['components'].items():
-            if component_data['status'] != 'healthy':
-                health_status['alerts'].append({
-                    'component': component_name,
-                    'status': component_data['status'],
-                    'message': component_data.get('message', 'Component health issue detected'),
-                    'details': component_data.get('details', {})
-                })
-        
-        logger.info(f"Health check completed: {health_status['overall_status']}")
-        
-        return health_status
-        
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        
-        # Log error to database
+
+    with get_session() as db:
         try:
-            asyncio.run(log_task_error(
-                db=db,
-                exception=e,
-                error_type=ErrorType.SYSTEM_ERROR,
-                error_severity=ErrorSeverity.CRITICAL,
-                context={
-                    "task_name": "health_check_task",
-                    "task_id": task_id
-                }
-            ))
-        except Exception as log_error:
-            logger.error(f"Failed to log error to database: {log_error}")
-        
-        health_status['overall_status'] = 'critical'
-        health_status['error'] = str(e)
-        return health_status
-    
-    finally:
-        db.close()
+            # Database health check
+            health_status['components']['database'] = asyncio.run(_check_database_health(db))
+
+            # System resources check
+            health_status['components']['system'] = asyncio.run(_check_system_resources())
+
+            # Storage health check
+            health_status['components']['storage'] = asyncio.run(_check_storage_health())
+
+            # ETL jobs health check
+            health_status['components']['etl_jobs'] = asyncio.run(_check_etl_jobs_health(db))
+
+            # Celery workers check
+            health_status['components']['celery'] = asyncio.run(_check_celery_health())
+
+            # External dependencies check
+            health_status['components']['external'] = asyncio.run(_check_external_dependencies())
+
+            # Aggregate metrics
+            health_status['metrics'] = asyncio.run(_aggregate_health_metrics(health_status['components']))
+
+            # Determine overall status
+            component_statuses = [comp['status'] for comp in health_status['components'].values()]
+            if 'critical' in component_statuses:
+                health_status['overall_status'] = 'critical'
+            elif 'warning' in component_statuses:
+                health_status['overall_status'] = 'warning'
+            elif 'unhealthy' in component_statuses:
+                health_status['overall_status'] = 'unhealthy'
+
+            # Generate alerts for issues
+            for component_name, component_data in health_status['components'].items():
+                if component_data['status'] != 'healthy':
+                    health_status['alerts'].append({
+                        'component': component_name,
+                        'status': component_data['status'],
+                        'message': component_data.get('message', 'Component health issue detected'),
+                        'details': component_data.get('details', {})
+                    })
+
+            logger.info(f"Health check completed: {health_status['overall_status']}")
+
+            return health_status
+
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+
+            # Log error to database
+            try:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.CRITICAL,
+                    context={
+                        "task_name": "health_check_task",
+                        "task_id": task_id
+                    }
+                ))
+            except Exception as log_error:
+                logger.error(f"Failed to log error to database: {log_error}")
+
+            health_status['overall_status'] = 'critical'
+            health_status['error'] = str(e)
+            return health_status
 
 @celery_app.task(
     bind=True,
@@ -134,62 +131,59 @@ async def health_check_task(self):
     time_limit=900,
     soft_time_limit=840
 )
-async def collect_system_metrics(self):
+def collect_system_metrics(self):
     """
     Collect comprehensive system metrics
-    
+
     Returns:
         System metrics and performance data
     """
     task_id = self.request.id
     logger.info(f"Starting metrics collection task {task_id}")
-    
-    db = next(get_db())
-    try:
-        metrics = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'task_id': task_id,
-            'system_metrics': await _collect_system_metrics(),
-            'database_metrics': await _collect_database_metrics(db),
-            'etl_metrics': await _collect_etl_metrics(db),
-            'storage_metrics': await _collect_storage_metrics(),
-            'performance_metrics': await _collect_performance_metrics(db)
-        }
-        
-        # Store metrics in database or time series DB
-        await _store_metrics(db, metrics)
-        
-        logger.info(f"Metrics collection completed")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'metrics_collected': len(metrics),
-            'timestamp': metrics['timestamp']
-        }
-        
-    except Exception as e:
-        logger.error(f"Metrics collection failed: {str(e)}")
-        
-        # Log error to database
+
+    with get_session() as db:
         try:
-            asyncio.run(log_task_error(
-                db=db,
-                exception=e,
-                error_type=ErrorType.SYSTEM_ERROR,
-                error_severity=ErrorSeverity.HIGH,
-                context={
-                    "task_name": "collect_system_metrics",
-                    "task_id": task_id
-                }
-            ))
-        except Exception as log_error:
-            logger.error(f"Failed to log error to database: {log_error}")
-        
-        raise MonitoringException(f"Metrics collection failed: {str(e)}")
-    
-    finally:
-        db.close()
+            metrics = {
+                'timestamp': datetime.utcnow().isoformat(),
+                'task_id': task_id,
+                'system_metrics': asyncio.run(_collect_system_metrics()),
+                'database_metrics': asyncio.run(_collect_database_metrics(db)),
+                'etl_metrics': asyncio.run(_collect_etl_metrics(db)),
+                'storage_metrics': asyncio.run(_collect_storage_metrics()),
+                'performance_metrics': asyncio.run(_collect_performance_metrics(db))
+            }
+
+            # Store metrics in database or time series DB
+            asyncio.run(_store_metrics(db, metrics))
+
+            logger.info(f"Metrics collection completed")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'metrics_collected': len(metrics),
+                'timestamp': metrics['timestamp']
+            }
+
+        except Exception as e:
+            logger.error(f"Metrics collection failed: {str(e)}")
+
+            # Log error to database
+            try:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.HIGH,
+                    context={
+                        "task_name": "collect_system_metrics",
+                        "task_id": task_id
+                    }
+                ))
+            except Exception as log_error:
+                logger.error(f"Failed to log error to database: {log_error}")
+
+            raise MonitoringException(f"Metrics collection failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
@@ -197,96 +191,93 @@ async def collect_system_metrics(self):
     time_limit=1800,
     soft_time_limit=1680
 )
-async def generate_performance_report(self, period_days: int = 7, report_format: str = 'json'):
+def generate_performance_report(self, period_days: int = 7, report_format: str = 'json'):
     """
     Generate comprehensive performance report
-    
+
     Args:
         period_days: Number of days to include in report
         report_format: Format of report ('json', 'html', 'pdf')
-        
+
     Returns:
         Performance report data
     """
     task_id = self.request.id
     logger.info(f"Starting performance report generation task {task_id}")
-    
-    db = next(get_db())
-    try:
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=period_days)
-        
-        report = {
-            'report_id': task_id,
-            'generated_at': end_date.isoformat(),
-            'period': {
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'days': period_days
-            },
-            'summary': {},
-            'job_performance': {},
-            'system_performance': {},
-            'data_quality': {},
-            'alerts_summary': {},
-            'recommendations': []
-        }
-        
-        # ETL Job Performance Analysis
-        report['job_performance'] = await _analyze_job_performance(db, start_date, end_date)
-        
-        # System Performance Analysis
-        report['system_performance'] = await _analyze_system_performance(db, start_date, end_date)
-        
-        # Data Quality Analysis
-        report['data_quality'] = await _analyze_data_quality(db, start_date, end_date)
-        
-        # Alerts Summary
-        report['alerts_summary'] = await _analyze_alerts(db, start_date, end_date)
-        
-        # Generate Summary
-        report['summary'] = await _generate_report_summary(report)
-        
-        # Generate Recommendations
-        report['recommendations'] = await _generate_recommendations(report)
-        
-        # Format and save report
-        report_path = await _save_performance_report(report, report_format)
-        
-        logger.info(f"Performance report generated: {report_path}")
-        
-        return {
-            'status': 'success',
-            'task_id': task_id,
-            'report_path': report_path,
-            'report_format': report_format,
-            'period_days': period_days,
-            'generated_at': end_date.isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Performance report generation failed: {str(e)}")
-        
-        # Log error to database
+
+    with get_session() as db:
         try:
-            asyncio.run(log_task_error(
-                db=db,
-                exception=e,
-                error_type=ErrorType.SYSTEM_ERROR,
-                error_severity=ErrorSeverity.MEDIUM,
-                context={
-                    "task_name": "generate_performance_report",
-                    "task_id": task_id,
-                    "period_days": period_days
-                }
-            ))
-        except Exception as log_error:
-            logger.error(f"Failed to log error to database: {log_error}")
-        
-        raise MonitoringException(f"Performance report generation failed: {str(e)}")
-    
-    finally:
-        db.close()
+            end_date = datetime.utcnow()
+            start_date = end_date - timedelta(days=period_days)
+
+            report = {
+                'report_id': task_id,
+                'generated_at': end_date.isoformat(),
+                'period': {
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat(),
+                    'days': period_days
+                },
+                'summary': {},
+                'job_performance': {},
+                'system_performance': {},
+                'data_quality': {},
+                'alerts_summary': {},
+                'recommendations': []
+            }
+
+            # ETL Job Performance Analysis
+            report['job_performance'] = asyncio.run(_analyze_job_performance(db, start_date, end_date))
+
+            # System Performance Analysis
+            report['system_performance'] = asyncio.run(_analyze_system_performance(db, start_date, end_date))
+
+            # Data Quality Analysis
+            report['data_quality'] = asyncio.run(_analyze_data_quality(db, start_date, end_date))
+
+            # Alerts Summary
+            report['alerts_summary'] = asyncio.run(_analyze_alerts(db, start_date, end_date))
+
+            # Generate Summary
+            report['summary'] = asyncio.run(_generate_report_summary(report))
+
+            # Generate Recommendations
+            report['recommendations'] = asyncio.run(_generate_recommendations(report))
+
+            # Format and save report
+            report_path = asyncio.run(_save_performance_report(report, report_format))
+
+            logger.info(f"Performance report generated: {report_path}")
+
+            return {
+                'status': 'success',
+                'task_id': task_id,
+                'report_path': report_path,
+                'report_format': report_format,
+                'period_days': period_days,
+                'generated_at': end_date.isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Performance report generation failed: {str(e)}")
+
+            # Log error to database
+            try:
+                asyncio.run(log_task_error(
+                    db=db,
+                    exception=e,
+                    error_type=ErrorType.SYSTEM_ERROR,
+                    error_severity=ErrorSeverity.MEDIUM,
+                    context={
+                        "task_name": "generate_performance_report",
+                        "task_id": task_id,
+                        "period_days": period_days
+                    }
+                ))
+            except Exception as log_error:
+                logger.error(f"Failed to log error to database: {log_error}")
+
+            raise MonitoringException(f"Performance report generation failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
@@ -303,129 +294,126 @@ def check_job_status(self):
     """
     task_id = self.request.id
     logger.info(f"Starting job status check task {task_id}")
-    
-    db = next(get_db())
-    try:
-        job_analysis = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'task_id': task_id,
-            'total_jobs': 0,
-            'active_jobs': 0,
-            'running_jobs': 0,
-            'failed_jobs': 0,
-            'stuck_jobs': 0,
-            'job_details': [],
-            'issues_detected': []
-        }
-        
-        # Get all jobs
-        jobs = db.exec(select(EtlJob)).all()
-        job_analysis['total_jobs'] = len(jobs)
-        
-        current_time = datetime.utcnow()
-        
-        for job in jobs:
-            if job.is_active:
-                job_analysis['active_jobs'] += 1
-                
-                # Get latest execution
-                latest_execution = db.exec(
-                    select(JobExecution)
-                    .where(JobExecution.job_id == job.job_id)
-                    .order_by(JobExecution.start_time.desc())
-                    .limit(1)
-                ).first()
-                
-                job_detail = {
-                    'job_id': str(job.job_id),
-                    'job_name': job.job_name,
-                    'job_type': job.job_type,
-                    'last_execution': None,
-                    'status': 'never_run',
-                    'issues': []
-                }
-                
-                if latest_execution:
-                    job_detail['last_execution'] = {
-                        'execution_id': str(latest_execution.execution_id),
-                        'status': latest_execution.status,
-                        'start_time': latest_execution.start_time.isoformat() if latest_execution.start_time else None,
-                        'end_time': latest_execution.end_time.isoformat() if latest_execution.end_time else None,
-                        'duration_minutes': None
+
+    with get_session() as db:
+        try:
+            job_analysis = {
+                'timestamp': datetime.utcnow().isoformat(),
+                'task_id': task_id,
+                'total_jobs': 0,
+                'active_jobs': 0,
+                'running_jobs': 0,
+                'failed_jobs': 0,
+                'stuck_jobs': 0,
+                'job_details': [],
+                'issues_detected': []
+            }
+
+            # Get all jobs
+            jobs = db.exec(select(EtlJob)).all()
+            job_analysis['total_jobs'] = len(jobs)
+
+            current_time = datetime.utcnow()
+
+            for job in jobs:
+                if job.is_active:
+                    job_analysis['active_jobs'] += 1
+
+                    # Get latest execution
+                    latest_execution = db.exec(
+                        select(JobExecution)
+                        .where(JobExecution.job_id == job.job_id)
+                        .order_by(JobExecution.start_time.desc())
+                        .limit(1)
+                    ).first()
+
+                    job_detail = {
+                        'job_id': str(job.job_id),
+                        'job_name': job.job_name,
+                        'job_type': job.job_type,
+                        'last_execution': None,
+                        'status': 'never_run',
+                        'issues': []
                     }
-                    
-                    # Calculate duration
-                    if latest_execution.start_time and latest_execution.end_time:
-                        duration = latest_execution.end_time - latest_execution.start_time
-                        job_detail['last_execution']['duration_minutes'] = duration.total_seconds() / 60
-                    
-                    job_detail['status'] = latest_execution.status
-                    
-                    # Check for issues
-                    if latest_execution.status == 'RUNNING':
-                        job_analysis['running_jobs'] += 1
-                        
-                        # Check if job is stuck (running for too long)
-                        if latest_execution.start_time:
-                            running_duration = current_time - latest_execution.start_time
-                            if running_duration > timedelta(hours=4):  # 4 hours threshold
-                                job_analysis['stuck_jobs'] += 1
-                                job_detail['issues'].append('Job running for excessive time')
-                                job_analysis['issues_detected'].append({
-                                    'job_id': str(job.job_id),
-                                    'issue': 'stuck_job',
-                                    'details': f"Running for {running_duration}"
-                                })
-                    
-                    elif latest_execution.status == 'FAILED':
-                        job_analysis['failed_jobs'] += 1
-                        job_detail['issues'].append('Last execution failed')
-                        job_analysis['issues_detected'].append({
-                            'job_id': str(job.job_id),
-                            'issue': 'failed_execution',
-                            'details': latest_execution.execution_log
-                        })
-                    
-                    # Check for long time since last execution
-                    if latest_execution.start_time:
-                        time_since_last = current_time - latest_execution.start_time
-                        if time_since_last > timedelta(days=7):  # 7 days threshold
-                            job_detail['issues'].append('No recent execution')
+
+                    if latest_execution:
+                        job_detail['last_execution'] = {
+                            'execution_id': str(latest_execution.id),
+                            'status': latest_execution.status,
+                            'start_time': latest_execution.start_time.isoformat() if latest_execution.start_time else None,
+                            'end_time': latest_execution.end_time.isoformat() if latest_execution.end_time else None,
+                            'duration_minutes': None
+                        }
+
+                        # Calculate duration
+                        if latest_execution.start_time and latest_execution.end_time:
+                            duration = latest_execution.end_time - latest_execution.start_time
+                            job_detail['last_execution']['duration_minutes'] = duration.total_seconds() / 60
+
+                        job_detail['status'] = latest_execution.status
+
+                        # Check for issues
+                        if latest_execution.status == 'RUNNING':
+                            job_analysis['running_jobs'] += 1
+
+                            # Check if job is stuck (running for too long)
+                            if latest_execution.start_time:
+                                running_duration = current_time - latest_execution.start_time
+                                if running_duration > timedelta(hours=4):  # 4 hours threshold
+                                    job_analysis['stuck_jobs'] += 1
+                                    job_detail['issues'].append('Job running for excessive time')
+                                    job_analysis['issues_detected'].append({
+                                        'job_id': str(job.job_id),
+                                        'issue': 'stuck_job',
+                                        'details': f"Running for {running_duration}"
+                                    })
+
+                        elif latest_execution.status == 'FAILED':
+                            job_analysis['failed_jobs'] += 1
+                            job_detail['issues'].append('Last execution failed')
                             job_analysis['issues_detected'].append({
                                 'job_id': str(job.job_id),
-                                'issue': 'stale_job',
-                                'details': f"Last run {time_since_last} ago"
+                                'issue': 'failed_execution',
+                                'details': latest_execution.execution_log
                             })
-                
-                job_analysis['job_details'].append(job_detail)
-        
-        logger.info(f"Job status check completed: {job_analysis['issues_detected'].__len__()} issues detected")
-        
-        return job_analysis
-        
-    except Exception as e:
-        logger.error(f"Job status check failed: {str(e)}")
-        
-        # Log error to database
-        try:
-            with get_session() as error_db:
-                asyncio.run(log_task_error(
-                    db=error_db,
-                    exception=e,
-                    error_type=ErrorType.SYSTEM_ERROR,
-                    error_severity=ErrorSeverity.MEDIUM,
-                    context={
-                        "task_name": "check_job_status",
-                        "task_id": task_id
-                    }
-                ))
-        except Exception as log_error:
-            logger.error(f"Failed to log error to database: {log_error}")
-        
-        raise MonitoringException(f"Job status check failed: {str(e)}")
-    
-    finally:
-        db.close()
+
+                        # Check for long time since last execution
+                        if latest_execution.start_time:
+                            time_since_last = current_time - latest_execution.start_time
+                            if time_since_last > timedelta(days=7):  # 7 days threshold
+                                job_detail['issues'].append('No recent execution')
+                                job_analysis['issues_detected'].append({
+                                    'job_id': str(job.job_id),
+                                    'issue': 'stale_job',
+                                    'details': f"Last run {time_since_last} ago"
+                                })
+
+                    job_analysis['job_details'].append(job_detail)
+
+            logger.info(f"Job status check completed: {job_analysis['issues_detected'].__len__()} issues detected")
+
+            return job_analysis
+
+        except Exception as e:
+            logger.error(f"Job status check failed: {str(e)}")
+
+            # Log error to database
+            try:
+                with get_session() as error_db:
+                    asyncio.run(log_task_error(
+                        db=error_db,
+                        exception=e,
+                        error_type=ErrorType.SYSTEM_ERROR,
+                        error_severity=ErrorSeverity.MEDIUM,
+                        context={
+                            "task_name": "check_job_status",
+                            "task_id": task_id
+                        }
+                    ))
+            except Exception as log_error:
+                logger.error(f"Failed to log error to database: {log_error}")
+
+            raise MonitoringException(f"Job status check failed: {str(e)}")
 
 @celery_app.task(
     bind=True,
@@ -433,20 +421,20 @@ def check_job_status(self):
     time_limit=300,
     soft_time_limit=240
 )
-async def send_alert_notifications(self, alert_type: str = None, data: Dict[str, Any] = None):
+def send_alert_notifications(self, alert_type: str = None, data: Dict[str, Any] = None):
     """
     Send alert notifications via email, Slack, etc.
-    
+
     Args:
         alert_type: Type of alert to send
         data: Alert data and context
-        
+
     Returns:
         Notification sending results
     """
     task_id = self.request.id
     logger.info(f"Starting alert notification task {task_id}")
-    
+
     try:
         notification_results = {
             'task_id': task_id,
@@ -456,36 +444,36 @@ async def send_alert_notifications(self, alert_type: str = None, data: Dict[str,
             'notifications_failed': 0,
             'results': []
         }
-        
+
         # Get pending alerts if no specific alert provided
         if not alert_type or not data:
-            pending_alerts = await _get_pending_alerts()
+            pending_alerts = asyncio.run(_get_pending_alerts())
         else:
             pending_alerts = [{'type': alert_type, 'data': data}]
-        
+
         for alert in pending_alerts:
             try:
                 # Send email notification
                 if settings.EMAIL_ALERTS_ENABLED:
-                    email_result = await _send_email_alert(alert)
+                    email_result = asyncio.run(_send_email_alert(alert))
                     notification_results['results'].append(email_result)
                     if email_result['success']:
                         notification_results['notifications_sent'] += 1
                     else:
                         notification_results['notifications_failed'] += 1
-                
+
                 # Send Slack notification
                 if settings.SLACK_ALERTS_ENABLED:
-                    slack_result = await _send_slack_alert(alert)
+                    slack_result = asyncio.run(_send_slack_alert(alert))
                     notification_results['results'].append(slack_result)
                     if slack_result['success']:
                         notification_results['notifications_sent'] += 1
                     else:
                         notification_results['notifications_failed'] += 1
-                
+
                 # Send webhook notification
                 if settings.WEBHOOK_ALERTS_ENABLED:
-                    webhook_result = await _send_webhook_alert(alert)
+                    webhook_result = asyncio.run(_send_webhook_alert(alert))
                     notification_results['results'].append(webhook_result)
                     if webhook_result['success']:
                         notification_results['notifications_sent'] += 1
@@ -534,23 +522,23 @@ async def send_alert_notifications(self, alert_type: str = None, data: Dict[str,
     time_limit=1800,
     soft_time_limit=1680
 )
-async def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None):
+def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None):
     """
     Clean up old log files and entries
-    
+
     Args:
         days_old: Number of days old logs to clean up
         log_types: Types of logs to clean up
-        
+
     Returns:
         Cleanup results
     """
     task_id = self.request.id
     logger.info(f"Starting log cleanup task {task_id}")
-    
+
     try:
         cutoff_date = datetime.utcnow() - timedelta(days=days_old)
-        
+
         cleanup_results = {
             'task_id': task_id,
             'timestamp': datetime.utcnow().isoformat(),
@@ -561,29 +549,26 @@ async def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None
             'database_logs_deleted': 0,
             'errors': []
         }
-        
+
         # Clean up log files
         log_directories = [
             '/app/storage/logs',
             '/var/log/etl',
             '/tmp/etl_logs'
         ]
-        
+
         for log_dir in log_directories:
             if os.path.exists(log_dir):
-                log_cleanup = await _cleanup_log_directory(log_dir, cutoff_date, log_types)
+                log_cleanup = asyncio.run(_cleanup_log_directory(log_dir, cutoff_date, log_types))
                 cleanup_results['log_files_processed'] += log_cleanup['files_processed']
                 cleanup_results['log_files_deleted'] += log_cleanup['files_deleted']
                 cleanup_results['space_freed_mb'] += log_cleanup['space_freed_mb']
                 cleanup_results['errors'].extend(log_cleanup['errors'])
-        
+
         # Clean up database log entries
-        db = next(get_db())
-        try:
-            db_cleanup = await _cleanup_database_logs(db, cutoff_date)
+        with get_session() as db:
+            db_cleanup = asyncio.run(_cleanup_database_logs(db, cutoff_date))
             cleanup_results['database_logs_deleted'] = db_cleanup['records_deleted']
-        finally:
-            db.close()
         
         logger.info(f"Log cleanup completed: {cleanup_results['log_files_deleted']} files deleted, {cleanup_results['space_freed_mb']:.2f} MB freed")
         

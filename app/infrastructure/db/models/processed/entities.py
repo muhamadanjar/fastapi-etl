@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
+from uuid import UUID
 from app.infrastructure.db.models.base import BaseModel
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
 from sqlalchemy import ARRAY, Integer, text
@@ -16,6 +17,8 @@ class EntityBase(BaseModel):
     confidence_score: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     version: int = Field(default=1)
     is_active: bool = Field(default=True)
+    duplicate_count: int = Field(default=0)
+    master_entity_id: Optional[UUID] = Field(default=None, index=True)
 
 
 class Entity(EntityBase, table=True):
@@ -24,7 +27,7 @@ class Entity(EntityBase, table=True):
     __table_args__ = (
         {"schema": "processed"},
     )
-    
+
     last_updated: datetime = Field(default_factory=datetime.utcnow)
 
     relationships_from: Optional[List["EntityRelationship"]] = Relationship(
@@ -35,7 +38,12 @@ class Entity(EntityBase, table=True):
         back_populates="to_entity",
         sa_relationship_kwargs={"foreign_keys": "[EntityRelationship.entity_to]"},
     )
-    
+
+    @property
+    def entity_id(self) -> UUID:
+        """Alias for id — used in Phase 6 lineage/relationship tracking."""
+        return self.id
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -73,6 +81,8 @@ class EntityUpdate(SQLModel):
     confidence_score: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     version: Optional[int] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
+    duplicate_count: Optional[int] = Field(default=None)
+    master_entity_id: Optional[UUID] = Field(default=None)
 
 
 class EntityRead(EntityBase):

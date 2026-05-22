@@ -18,6 +18,7 @@ class StandardizedDataBase(BaseModel):
     quality_score: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     transformation_rules_applied: Optional[List[str]] = Field(default=None, sa_column=Column(ARRAY(String)))
     batch_id: Optional[str] = Field(default=None, max_length=50, index=True)
+    validation_status: str = Field(default='pending', max_length=20, index=True)
 
 
 class StandardizedData(StandardizedDataBase, table=True):
@@ -79,6 +80,7 @@ class StandardizedDataUpdate(SQLModel):
     quality_score: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     transformation_rules_applied: Optional[List[str]] = Field(default=None)
     batch_id: Optional[str] = Field(default=None, max_length=50)
+    validation_status: Optional[str] = Field(default=None, max_length=20)
 
 
 class StandardizedDataRead(StandardizedDataBase):

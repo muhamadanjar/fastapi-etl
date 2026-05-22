@@ -73,7 +73,7 @@ class MonitoringService(BaseService):
             
             # Calculate performance metrics
             total_executions = len(executions)
-            successful_executions = len([e for e in executions if e.status == JobStatus.SUCCESS.value])
+            successful_executions = len([e for e in executions if e.status == JobStatus.COMPLETED.value])
             failed_executions = len([e for e in executions if e.status == JobStatus.FAILED.value])
             
             # Calculate duration statistics
@@ -629,7 +629,7 @@ class MonitoringService(BaseService):
             trend_data.append({
                 "date": date.isoformat(),
                 "total_executions": len(day_executions),
-                "successful_executions": len([e for e in day_executions if e.status == JobStatus.SUCCESS.value]),
+                "successful_executions": len([e for e in day_executions if e.status == JobStatus.COMPLETED.value]),
                 "failed_executions": len([e for e in day_executions if e.status == JobStatus.FAILED.value])
             })
         

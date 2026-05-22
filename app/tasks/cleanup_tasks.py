@@ -284,7 +284,7 @@ def purge_expired_records(self, retention_days: int = 365) -> Dict[str, Any]:
                 old_executions_stmt = delete(JobExecution).where(
                     and_(
                         JobExecution.created_at < cutoff_date,
-                        JobExecution.status.in_([JobStatus.SUCCESS.value, JobStatus.FAILED.value])
+                        JobExecution.status.in_([JobStatus.COMPLETED.value, JobStatus.FAILED.value])
                     )
                 )
                 result = db.execute(old_executions_stmt)

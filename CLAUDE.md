@@ -213,6 +213,90 @@ PostgreSQL with 7 schemas:
 
 **Error Handling**: Domain exceptions (app/domain/exceptions/) → HTTP errors via `app/core/exceptions.AppException` middleware
 
+## EtlJob Design Decisions
+
+### Job Definition vs File Reference
+
+`EtlJob` adalah **job definition (template)** — mendefinisikan HOW memproses data, bukan WHAT data. Karena itu `EtlJob` tidak punya relasi langsung ke `FileRegistry`.
+
+Alasan:
+- Scheduled jobs tidak tahu file mana yang akan ada saat runtime
+- Job yang sama bisa dipakai untuk banyak batch file berbeda
+- File selection harus dinamis, bukan statis di job definition
+
+### File ID Passing Strategy
+
+**Manual/one-time execution** — pass via `parameters` saat trigger:
+```python
+execute_etl_job.delay(
+    job_id="...",
+    parameters={"file_ids": ["uuid1", "uuid2"]}
+)
+```
+
+**Scheduled/recurring job** — simpan kriteria seleksi di `job_config`, bukan file_ids literal:
+```python
+job_config = {
+    "file_type": "CSV",
+    "source_system": "SalesForce",
+    "status": "PENDING"
+}
+```
+
+Di `_execute_extract_job`, prioritas lookup:
+1. Cek `config.get('file_ids')` — explicit IDs dari parameters
+2. Fallback: query `FileRegistry` pakai kriteria (`file_type`, `source_system`, `processing_status`)
+
+---
+
+## Celery Task Patterns
+
+### Anti-patterns yang Harus Dihindari
+
+**SALAH — `await` pada `apply_async()`**:
+```python
+result = await some_task.apply_async(args=[...]).get()
+# apply_async() bukan coroutine — hapus await
+```
+
+**BENAR**:
+```python
+result = some_task.apply_async(args=[...]).get()
+```
+
+**SALAH — import di dalam exception handler**:
+```python
+except Exception as e:
+    from app.tasks.task_helpers import log_task_error
+    from app.infrastructure.db.models.etl_control.error_logs import ErrorType
+```
+
+**BENAR** — semua imports di top of file.
+
+**SALAH — `db.is_active` tidak ada di SQLModel Session**:
+```python
+if file_record is None or not db.is_active:
+```
+**BENAR**:
+```python
+if file_record is None:
+```
+
+**SALAH — `begin_nested()` tidak punya `.commit()`**:
+```python
+transaction = db.begin_nested()
+transaction.commit()  # AttributeError
+```
+**BENAR** — gunakan sebagai context manager atau langsung `db.commit()`.
+
+**Async dalam Celery** — task sync, gunakan `asyncio.run()`:
+```python
+result = asyncio.run(async_function(args))
+```
+Jangan `async def` untuk Celery task — Celery tidak support native async.
+
+---
+
 ## Phase Implementation Details
 
 ### Phase 2: ETL Job Creation (IMPLEMENTED ✅)
@@ -285,6 +369,111 @@ PostgreSQL with 7 schemas:
 - Verify: jobs:* cache is invalidated
 - Verify: On error, all inserts are rolled back atomically
 - Verify: On cache/event failure, job creation still succeeds
+
+---
+
+### Phase 3: File Upload & Registration (IMPLEMENTED ✅)
+
+**File**: `app/application/services/file_service.py`
+
+Flow:
+1. POST /api/v1/files/upload — receive multipart file
+2. Validate file type (CSV, EXCEL, JSON, XML)
+3. Save file ke storage (`/app/storage/uploads/`)
+4. INSERT `raw_data.file_registry`
+5. Return `file_id` (UUID) + metadata
+
+`file_id` inilah yang dipass ke Celery task saat processing.
+
+---
+
+### Phase 4: File Processing (IMPLEMENTED ✅)
+
+**Task**: `app/tasks/etl_tasks.py` → `process_file_task(file_id, user_id, processing_config)`
+
+Trigger:
+```python
+process_file_task.delay(file_id, user_id, processing_config)
+```
+
+Flow:
+1. Fetch `FileRegistry` by `file_id`
+2. Set `processing_status` → `PROCESSING`
+3. `get_processor(file_type)` — pilih CSV/Excel/JSON/XML processor
+4. `processor.validate_file_format(file_path)` — via `asyncio.run()`
+5. `processor.process_file(file_path, file_record)` — parse & insert ke `raw_data.raw_records`
+6. Set status → `COMPLETED` atau `FAILED`
+7. Update `file_metadata` dengan hasil
+
+---
+
+### Phase 5: Transform Records (IMPLEMENTED ✅)
+
+**Function**: `transform_records(db, execution_id, transform_config)`
+
+Input: `raw_data.raw_records` WHERE `validation_status IN (UNVALIDATED, VALID)`
+
+Output:
+- SUCCESS → `staging.standardized_data` + `etl_control.quality_check_results`
+- FAILURE → `raw_data.rejected_records` + `etl_control.quality_check_results`
+
+Pipeline per record:
+1. `DataCleaner.transform_record()` — whitespace, case, null
+2. `FieldMappingService.execute_mappings()` — direct/calculated/lookup/constant transformations
+3. `DataValidator.transform_record()` — quality rules dari `etl_control.quality_rules`
+4. Route hasil: PASS → standardized_data, FAIL → rejected_records
+
+Config:
+```python
+transform_config = {
+    "entity_type": "CUSTOMER",
+    "batch_size": 1000,
+    "cleaner_config": {},
+    "validator_config": {},
+    "normalizer_config": {}
+}
+```
+
+---
+
+### Phase 6: Load Records (IMPLEMENTED ✅)
+
+**Function**: `load_records(db, execution_id, load_config)`
+
+Input: `staging.standardized_data` WHERE `validation_status='passed'`
+
+Output: `processed.entities` + `processed.entity_relationships` + `audit.data_lineage`
+
+Entity Matching Logic:
+1. Hitung `entity_hash = MD5(key_fields values joined)`
+2. Exact hash match → `confidence_score=1.0`, skip insert
+3. Fuzzy similarity > threshold → `is_duplicate=True`
+4. No match → `is_new=True`, INSERT entity baru
+
+Conflict Resolution Strategies (`conflict_resolution_strategy`):
+- `newer_wins` — new data selalu menang (default)
+- `score_based` — confidence >= 0.9 menang, else selective merge
+- `conservative` — existing selalu menang
+- `merge` — recursive merge dicts, unique merge lists
+
+Config:
+```python
+load_config = {
+    "entity_type": "CUSTOMER",
+    "key_fields": ["id", "email"],
+    "batch_size": 1000,
+    "similarity_threshold": 0.85,
+    "conflict_resolution_strategy": "newer_wins"
+}
+```
+
+---
+
+### Phase 7: Post-Processing (IMPLEMENTED ✅)
+
+**Function**: `post_process_job(db, execution_id, job_id, job_name)`
+
+Otomatis trigger setelah Phase 6 selesai. Trigger dependent jobs. Non-blocking — failure di Phase 7 tidak gagalkan job utama.
 
 ---
 

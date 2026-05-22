@@ -4,6 +4,7 @@ Transformation service for managing data transformation rules and operations.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 
@@ -44,7 +45,8 @@ class TransformationService(BaseService):
                 rule_logic=rule_data.get("rule_logic"),
                 rule_parameters=rule_data.get("rule_parameters", {}),
                 priority=rule_data.get("priority", 1),
-                is_active=rule_data.get("is_active", True)
+                is_active=rule_data.get("is_active", True),
+                job_id=rule_data.get("job_id")
             )
             
             self.db.add(rule)
@@ -81,7 +83,8 @@ class TransformationService(BaseService):
                 mapping_expression=mapping_data.get("mapping_expression"),
                 data_type=mapping_data.get("data_type"),
                 is_required=mapping_data.get("is_required", False),
-                default_value=mapping_data.get("default_value")
+                default_value=mapping_data.get("default_value"),
+                job_id=mapping_data.get("job_id")
             )
             
             self.db.add(mapping)
@@ -199,12 +202,13 @@ class TransformationService(BaseService):
         except Exception as e:
             self.handle_error(e, "apply_custom_transformation")
     
-    async def get_transformation_rules(self, source_format: str = None, target_format: str = None) -> List[Dict[str, Any]]:
+    async def get_transformation_rules(self, source_format: str = None, target_format: str = None, job_id: UUID = None) -> List[Dict[str, Any]]:
         """Get transformation rules with optional filtering."""
         try:
             self.log_operation("get_transformation_rules", {
                 "source_format": source_format,
-                "target_format": target_format
+                "target_format": target_format,
+                "job_id": str(job_id) if job_id else None
             })
 
             stmt = select(TransformationRule).where(TransformationRule.is_active == True)
@@ -213,6 +217,8 @@ class TransformationService(BaseService):
                 stmt = stmt.where(TransformationRule.source_format == source_format)
             if target_format:
                 stmt = stmt.where(TransformationRule.target_format == target_format)
+            if job_id:
+                stmt = stmt.where(TransformationRule.job_id == job_id)
 
             rules = self.db.execute(stmt).scalars().all()
             
@@ -236,12 +242,13 @@ class TransformationService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_transformation_rules")
     
-    async def get_field_mappings(self, source_entity: str = None, target_entity: str = None) -> List[Dict[str, Any]]:
+    async def get_field_mappings(self, source_entity: str = None, target_entity: str = None, job_id: UUID = None) -> List[Dict[str, Any]]:
         """Get field mappings with optional filtering."""
         try:
             self.log_operation("get_field_mappings", {
                 "source_entity": source_entity,
-                "target_entity": target_entity
+                "target_entity": target_entity,
+                "job_id": str(job_id) if job_id else None
             })
 
             stmt = select(FieldMapping)
@@ -250,6 +257,8 @@ class TransformationService(BaseService):
                 stmt = stmt.where(FieldMapping.source_entity == source_entity)
             if target_entity:
                 stmt = stmt.where(FieldMapping.target_entity == target_entity)
+            if job_id:
+                stmt = stmt.where(FieldMapping.job_id == job_id)
 
             mappings = self.db.execute(stmt).scalars().all()
 

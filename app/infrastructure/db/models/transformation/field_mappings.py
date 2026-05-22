@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from sqlmodel import SQLModel, Field
 
 from app.infrastructure.db.models.base import BaseModel
@@ -12,14 +13,20 @@ class FieldMappingBase(BaseModel):
     target_entity: Optional[str] = Field(default=None, max_length=100, description="Target entity name")
     target_field: Optional[str] = Field(default=None, max_length=100, description="Target field name")
     mapping_type: Optional[str] = Field(
-        default=None, 
-        max_length=50, 
+        default=None,
+        max_length=50,
         description="Type of mapping: DIRECT, CALCULATED, LOOKUP"
     )
     mapping_expression: Optional[str] = Field(default=None, description="Expression for the mapping")
     data_type: Optional[str] = Field(default=None, max_length=50, description="Data type of the field")
     is_required: bool = Field(default=False, description="Whether the field is required")
     default_value: Optional[str] = Field(default=None, max_length=255, description="Default value for the field")
+    job_id: Optional[UUID] = Field(
+        default=None,
+        foreign_key="etl_control.etl_jobs.id",
+        index=True,
+        description="ETL job this mapping belongs to"
+    )
 
 
 class FieldMapping(FieldMappingBase, table=True):
@@ -52,3 +59,4 @@ class FieldMappingUpdate(SQLModel):
     data_type: Optional[str] = Field(default=None, max_length=50)
     is_required: Optional[bool] = Field(default=None)
     default_value: Optional[str] = Field(default=None, max_length=255)
+    job_id: Optional[UUID] = Field(default=None)
