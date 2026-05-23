@@ -28,35 +28,23 @@ settings = get_settings()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     print("🚀 Starting application...")
-    
+
+    messaging_initialized = False
+    cache_mode = None
+
     try:
+        setup_logging()
+
+        # Initialize database
+        await database_manager.connect()
+        print("✅ Database connection established")
+
         # Initialize Redis
         try:
-
-            # Initialize messaging
-            # await messaging_manager.initialize(
-            #     enable_redis=True,
-            #     enable_websocket=True,
-            #     enable_sse=True,
-            #     enable_rabbitmq=True,
-            #     rabbitmq_config={
-            #         'host': 'localhost',
-            #         'port': 5672,
-            #         'username': 'guest',
-            #         'password': 'guest',
-            #         'exchange_name': 'app_messages',
-            #         'exchange_type': ExchangeType.TOPIC
-            #     },
-            #     redis_config={
-            #         'host': 'localhost',
-            #         'port': 6379,
-            #         'db': 0
-            #     }
-            # )
-            # print("✅ Messaging system initialized")
             await redis_manager.connect()
             redis_cache = redis_manager.get_cache()
-            
+            cache_mode = "redis"
+
             # Initialize cache manager with Redis + Memory fallback
             await cache_manager.initialize(
                 primary_cache=redis_cache,
@@ -70,15 +58,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 recovery_interval=60
             )
             print("✅ Cache system initialized (Redis + Memory fallback)")
-
-            await database_manager.connect()
-            print("✅ Database connection established")
-
-            setup_logging()
-            
         except Exception as e:
             print(f"⚠️  Redis unavailable: {e}")
-            
+            cache_mode = "memory"
+
             # Initialize with memory cache only
             await cache_manager.initialize(
                 primary_cache=None,
@@ -90,23 +73,75 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 }
             )
             print("✅ Memory cache initialized (fallback mode)")
-        
+
+        # Initialize messaging (environment-based config)
+        try:
+            rabbitmq_enabled = settings.rabbitmq_settings.host != "disabled"
+
+            await messaging_manager.initialize(
+                enable_redis=cache_mode == "redis",
+                enable_websocket=True,
+                enable_sse=True,
+                enable_rabbitmq=rabbitmq_enabled,
+                rabbitmq_config={
+                    'host': settings.rabbitmq_settings.host,
+                    'port': settings.rabbitmq_settings.port,
+                    'username': settings.rabbitmq_settings.user,
+                    'password': settings.rabbitmq_settings.password,
+                    'vhost': settings.rabbitmq_settings.vhost,
+                    'exchange_name': 'app_messages',
+                    'exchange_type': ExchangeType.TOPIC
+                } if rabbitmq_enabled else None,
+                redis_config={
+                    'host': settings.redis_settings.host,
+                    'port': settings.redis_settings.port,
+                    'db': settings.redis_settings.db
+                } if cache_mode == "redis" else None
+            )
+            messaging_initialized = True
+            print("✅ Messaging system initialized")
+        except Exception as e:
+            print(f"⚠️  Messaging initialization failed: {e}")
+            # Messaging failure non-blocking - app can still run with degraded functionality
+            if cache_mode == "redis":
+                print("   Falling back to Redis messaging only")
+            else:
+                print("   Running with in-memory messaging only")
+
         yield
-        
+
     finally:
         # Shutdown
         print("⏳ Shutting down...")
-        
-        # Shutdown cache manager
-        await cache_manager.shutdown()
-        print("✅ Cache manager shut down")
-        
-        # Shutdown Redis
-        await redis_manager.disconnect()
-        print("✅ Redis disconnected")
 
-        await database_manager.disconnect()
-        print("✅ Database connection closed")
+        # Shutdown messaging
+        if messaging_initialized:
+            try:
+                await messaging_manager.shutdown()
+                print("✅ Messaging system shut down")
+            except Exception as e:
+                print(f"⚠️  Messaging shutdown error: {e}")
+
+        # Shutdown cache manager
+        try:
+            await cache_manager.shutdown()
+            print("✅ Cache manager shut down")
+        except Exception as e:
+            print(f"⚠️  Cache shutdown error: {e}")
+
+        # Shutdown Redis
+        try:
+            await redis_manager.disconnect()
+            print("✅ Redis disconnected")
+        except Exception as e:
+            print(f"⚠️  Redis disconnect error: {e}")
+
+        # Shutdown database
+        try:
+            await database_manager.disconnect()
+            print("✅ Database connection closed")
+        except Exception as e:
+            print(f"⚠️  Database disconnect error: {e}")
 
 def create_application() -> FastAPI:
     app = FastAPI(
@@ -120,11 +155,6 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # if settings.ALLOWED_HOSTS:
-    #     app.add_middleware(
-    #         TrustedHostMiddleware,
-    #         allowed_hosts=settings.ALLOWED_HOSTS
-    #     )
 
     if settings.cors_settings.allowed_origins:
         app.add_middleware(
@@ -207,14 +237,22 @@ def create_application() -> FastAPI:
             health_status["status"] = "unhealthy"
         
         # Check Redis
-        if settings.redis_settings.url:
+        if settings.redis_settings.url or settings.redis_settings.host:
             try:
                 await redis_manager.health_check()
                 health_status["checks"]["cache"] = "healthy"
             except Exception as e:
                 health_status["checks"]["cache"] = f"unhealthy: {str(e)}"
                 health_status["status"] = "unhealthy"
-        
+
+        # Check Messaging
+        try:
+            messaging_health = await messaging_manager.health_check()
+            health_status["checks"]["messaging"] = messaging_health.get("status", "healthy")
+        except Exception as e:
+            health_status["checks"]["messaging"] = f"unhealthy: {str(e)}"
+            # Messaging health is non-critical for overall health
+
         return health_status
 
 

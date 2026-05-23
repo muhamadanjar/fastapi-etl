@@ -1,12 +1,12 @@
 import aiohttp
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import insert, literal
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import uuid
 
 from app.core.config import settings
-from app.infrastructure.db.manager import get_session_dependency, get_async_session_dependency, database_manager
+from app.infrastructure.db.manager import get_session_dependency, database_manager
 from app.infrastructure.cache import cache_manager
 from app.schemas.remote_user import RemoteUserInfo
 from app.infrastructure.db.models.auth import User
@@ -17,28 +17,25 @@ get_db = get_session_dependency
 
 
 async def _sync_user_to_db(user_info: RemoteUserInfo) -> None:
-    """Sync fetched user to database. Runs once per unique user (non-cached fetch)."""
+    """Sync fetched user to database via UPSERT. Runs once per unique user (non-cached fetch)."""
     try:
         async with database_manager.get_async_session() as session:
-            # Check if user exists by remote ID or email
-            stmt = select(User).where(
-                (User.email == user_info.email)
-            )
-            existing_user = await session.scalar(stmt)
+            user_id = uuid.UUID(user_info.id) if isinstance(user_info.id, str) else user_info.id
 
-            if not existing_user:
-                # Create new user from remote info
-                new_user = User(
-                    id=uuid.UUID(user_info.id) if isinstance(user_info.id, str) else user_info.id,
-                    username=user_info.username,
-                    email=user_info.email,
-                    full_name=user_info.full_name or user_info.name,
-                    is_active=user_info.is_active,
-                    is_superuser=user_info.is_superuser,
-                    password="",  # Remote user, no password stored locally
-                )
-                session.add(new_user)
-                await session.commit()
+            # UPSERT: insert if not exist, skip if already there (single atomic query)
+            stmt = pg_insert(User).values(
+                id=user_id,
+                username=user_info.username,
+                email=user_info.email,
+                full_name=user_info.full_name or user_info.name,
+                is_active=user_info.is_active,
+                is_superuser=user_info.is_superuser,
+                password="",
+                created_at=literal(None),
+            ).on_conflict_do_nothing(index_elements=["email"])
+
+            await session.execute(stmt)
+            await session.commit()
     except Exception as e:
         # Log error but don't block auth flow - user fetch succeeded even if sync failed
         import logging
