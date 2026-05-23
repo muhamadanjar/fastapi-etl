@@ -1,0 +1,214 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, next]
+  pull_request:
+    branches: [main, master]
+
+# ─── Global env ────────────────────────────────────────────────────────────────
+
+env:
+  POSTGRES_DB: etl_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: password
+  PIP_CACHE_DIR: ~/.cache/pip
+
+jobs:
+
+# ─── Test ──────────────────────────────────────────────────────────────────────
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: etl_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 15s
+          --health-timeout 10s
+          --health-retries 10
+        ports:
+          - 5672:5672
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/etl_test
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      RABBITMQ_HOST: localhost
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      BROKER_URL: amqp://guest:guest@localhost:5672/
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_BASE_DIR: /tmp/media_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Run database migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short --cov=app --cov-report=term --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 30
+
+
+# ─── Release ───────────────────────────────────────────────────────────────────
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # GH_TOKEN (PAT) so the commit pushed by @semantic-release/git
+          # can trigger subsequent workflows (GITHUB_TOKEN cannot).
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install semantic-release
+        run: |
+          npm install -g \
+            semantic-release \
+            @semantic-release/github \
+            @semantic-release/git \
+            @semantic-release/changelog \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator
+
+      - name: Configure git identity
+        run: |
+          git config user.email "ci@github-actions"
+          git config user.name "GitHub Actions"
+
+      - name: Run semantic-release
+        run: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload CHANGELOG artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: changelog
+          path: CHANGELOG.md
+          retention-days: 30
+
+
+# ─── Deploy ────────────────────────────────────────────────────────────────────
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    continue-on-error: true
+
+    env:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      VM_IPADDRESS: ${{ secrets.VM_IPADDRESS }}
+      VM_SSH_PORT: ${{ secrets.VM_SSH_PORT }}
+
+    steps:
+      - name: Set up SSH agent
+        run: |
+          eval $(ssh-agent -s)
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Support both raw and base64-encoded key formats
+          if echo "$SSH_PRIVATE_KEY" | grep -q "^-----BEGIN"; then
+            printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          elif echo "$SSH_PRIVATE_KEY" | base64 -d 2>/dev/null | grep -q "BEGIN.*PRIVATE KEY"; then
+            echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_rsa
+          else
+            printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          fi
+
+          chmod 600 ~/.ssh/id_rsa
+
+          if ! grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/id_rsa; then
+            echo "ERROR: SSH key missing BEGIN marker"
+            exit 1
+          fi
+
+          ssh-add ~/.ssh/id_rsa
+          touch ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh-keyscan -p "$VM_SSH_PORT" "$VM_IPADDRESS" >> ~/.ssh/known_hosts 2>&1 || true
+
+      - name: Deploy via SSH git pull
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+              -i ~/.ssh/id_rsa \
+              -p "$VM_SSH_PORT" \
+              "web@$VM_IPADDRESS" \
+              "cd /var/www/etl_prod && git pull origin main && exit"

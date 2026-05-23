@@ -1,7 +1,10 @@
 {
-  "branches": ["main", {"name": "next", "prerelease": true}],
+  "branches": [
+    "main",
+    "master",
+    {"name": "next", "prerelease": true}
+  ],
   "tagFormat": "${version}",
-  "repositoryUrl": "git@gitlab.com:muhamadanjar/fastapi_etl.git",
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
@@ -12,16 +15,21 @@
       }
     ],
     [
-      "@semantic-release/gitlab",
+      "@semantic-release/github",
       {
-        "gitlabUrl": "https://gitlab.com"
+        "assets": [
+          {
+            "path": "CHANGELOG.md",
+            "label": "Changelog"
+          }
+        ]
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["CHANGELOG.md", "package.json", "package-lock.json"],
-        "message": "chore(release): ${nextRelease.version} \n\n${nextRelease.notes}"
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
       }
     ]
   ]
