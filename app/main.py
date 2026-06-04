@@ -156,17 +156,20 @@ def create_application() -> FastAPI:
     )
 
 
+    # Middleware is applied in LIFO order — add innermost (last to run) first,
+    # outermost (first to run) last. CORS must be outermost so it handles
+    # preflight OPTIONS requests before any other middleware rejects them.
+    app.add_middleware(LoggingMiddleware)
+    app.add_middleware(RateLimitMiddleware, config=RateLimitConfig())
+
     if settings.cors_settings.allowed_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=[str(origin) for origin in settings.cors_settings.allowed_origins],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_credentials=settings.cors_settings.allow_credentials,
+            allow_methods=settings.cors_settings.allowed_methods,
+            allow_headers=settings.cors_settings.allowed_headers,
         )
-
-    app.add_middleware(LoggingMiddleware)
-    app.add_middleware(RateLimitMiddleware, config=RateLimitConfig())
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
