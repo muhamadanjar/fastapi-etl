@@ -62,12 +62,13 @@ class ETLLoggerAdapter(logging.LoggerAdapter):
     
     def process(self, msg, kwargs):
         # Add extra context to log records
-        if 'extra' not in kwargs:
+        if 'extra' not in kwargs or kwargs['extra'] is None:
             kwargs['extra'] = {}
-        
+
         # Merge adapter extra with kwargs extra
-        kwargs['extra'].update(self.extra)
-        
+        if self.extra:
+            kwargs['extra'].update(self.extra)
+
         return msg, kwargs
     
     def log_operation(self, operation: str, details: Optional[dict] = None, level: int = logging.INFO):
@@ -291,11 +292,13 @@ class LogContext:
     
     def __enter__(self):
         # Save original extra context
-        self.original_extra = self.logger_adapter.extra.copy()
-        
+        self.original_extra = (self.logger_adapter.extra or {}).copy()
+
         # Add new context
+        if not self.logger_adapter.extra:
+            self.logger_adapter.extra = {}
         self.logger_adapter.extra.update(self.context)
-        
+
         return self.logger_adapter
     
     def __exit__(self, exc_type, exc_val, exc_tb):
