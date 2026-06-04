@@ -34,7 +34,7 @@ from app.schemas.upload_session import (
 )
 from app.core.exceptions import FileError, ServiceError, AppException
 from app.core.enums import ProcessingStatus, FileTypeEnum
-from app.core.config import settings
+from app.core.config import get_settings
 from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
 from app.utils.date_utils import get_current_timestamp
 from app.infrastructure.storage.local_storage import LocalFileStorage
@@ -42,6 +42,7 @@ from app.infrastructure.storage.local_storage import LocalFileStorage
 # import cycle: processors.__init__ → base_processor → application.services →
 # file_service → processors.{csv,excel,json,xml}_processor → base_processor
 
+settings = get_settings()
 
 class FileService(BaseService):
     """Service untuk mengelola file operations."""

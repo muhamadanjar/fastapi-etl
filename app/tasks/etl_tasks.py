@@ -17,11 +17,20 @@ from app.core.enums import ProcessingStatus
 
 from .celery_app import celery_app
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
+from app.infrastructure.db.models.raw_data.raw_records import RawRecords
+from app.infrastructure.db.models.staging.standardized_data import StandardizedData, StandardizedDataCreate
+from app.infrastructure.db.models.raw_data.rejected_records import RejectedRecord
+from app.infrastructure.db.models.processed.entities import Entity
+from app.infrastructure.db.models.processed.entity_relationships import EntityRelationship
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
-from app.infrastructure.db.models.etl_control.error_logs import ErrorType
-from app.infrastructure.db.models.audit.data_lineage import DataLineage
+from app.infrastructure.db.models.etl_control.error_logs import ErrorType, ErrorLog, ErrorSeverity
+from app.infrastructure.db.models.etl_control.quality_check_results import QualityCheckResult, QualityCheckResultCreate
+from app.infrastructure.db.models.etl_control.quality_rules import QualityRule
+from app.infrastructure.db.models.audit.data_lineage import DataLineage, DataLineageCreate
+from app.infrastructure.db.models.audit.change_log import ChangeLog, ChangeLogCreate
 from app.infrastructure.db.manager import get_session
+from celery import group
 from app.processors import get_processor
 from app.transformers import create_transformation_pipeline
 from app.application.services.etl_service import ETLService
@@ -258,7 +267,6 @@ def run_transformation_pipeline(self, job_execution_id: str, transformation_conf
                 input_records = source_data.to_dict('records')
             else:
                 # Default: get recent raw records
-                from app.infrastructure.db.models.raw_data.raw_records import RawRecords
                 recent_records = db.exec(
                     select(RawRecords)
                     .where(RawRecords.validation_status == 'VALID')
@@ -514,9 +522,6 @@ def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str =
 
             # Log error to database
             try:
-                from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
-                from app.infrastructure.db.models.etl_control.error_logs import ErrorType
-
                 asyncio.run(log_task_error(
                     db=db,
                     exception=e,
@@ -1328,16 +1333,8 @@ async def load_records(
     Returns:
         Dictionary with load statistics
     """
-    from app.infrastructure.db.models.staging.standardized_data import StandardizedData
-    from app.infrastructure.db.models.processed.entities import Entity
-    from app.infrastructure.db.models.processed.entity_relationships import EntityRelationship
-    from app.infrastructure.db.models.audit.change_log import ChangeLog, ChangeLogCreate
-    from app.infrastructure.db.models.audit.data_lineage import DataLineage, DataLineageCreate
-    from app.infrastructure.db.models.etl_control.job_executions import JobExecution
-    from app.infrastructure.db.models.etl_control.error_logs import ErrorLog, ErrorType, ErrorSeverity
     from app.transformers.entity_matcher import EntityMatcher
     from app.application.services.entity_service import EntityService
-    from app.core.exceptions import ETLException
 
     logger.info(f"[PHASE 6] Starting load for execution {execution_id}")
 
@@ -1966,8 +1963,6 @@ def batch_process_files_task(self, file_ids: List[str], processing_config: Dict[
     
     try:
         # Process files in parallel using Celery group
-        from celery import group
-        
         # Create group of file processing tasks
         file_tasks = group(
             process_file_task.s(file_id, processing_config)

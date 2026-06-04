@@ -12,10 +12,11 @@ from app.application.services.base import BaseService
 from app.infrastructure.db.models.auth import User, UserCreate, UserUpdate
 from app.infrastructure.db.repositories.user_repository import UserRepository
 from app.core.security import get_password_hash
-from app.core.config import settings
+from app.core.config import get_settings
 from app.infrastructure.cache import cache_manager
 from app.core.exceptions import ServiceError
 
+settings = get_settings()
 class UserService(BaseService):
     """
     User service for managing user operations.

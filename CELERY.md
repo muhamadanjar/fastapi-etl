@@ -31,17 +31,17 @@ redis-cli ping  # Should return: PONG
 
 **Basic Worker**:
 ```bash
-celery -A app.worker worker --loglevel=info
+celery -A app.tasks.celery_app worker --loglevel=info
 ```
 
 **Worker with Beat Scheduler**:
 ```bash
-celery -A app.worker worker --beat --loglevel=info
+celery -A app.tasks.celery_app worker --beat --loglevel=info
 ```
 
 **Worker with Concurrency**:
 ```bash
-celery -A app.worker worker --loglevel=info --concurrency=4
+celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
 ```
 
 ---
@@ -52,10 +52,10 @@ celery -A app.worker worker --loglevel=info --concurrency=4
 
 ```bash
 # Development (single process)
-celery -A app.worker worker --loglevel=debug --pool=solo
+celery -A app.tasks.celery_app worker --loglevel=debug --pool=solo
 
 # Production (multi-process)
-celery -A app.worker worker --loglevel=info --concurrency=4
+celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
 ```
 
 ### Worker Options
@@ -72,16 +72,16 @@ celery -A app.worker worker --loglevel=info --concurrency=4
 
 ```bash
 # Debug mode
-celery -A app.worker worker --loglevel=debug
+celery -A app.tasks.celery_app worker --loglevel=debug
 
 # High concurrency
-celery -A app.worker worker --concurrency=8
+celery -A app.tasks.celery_app worker --concurrency=8
 
 # Auto-scaling
-celery -A app.worker worker --autoscale=10,2
+celery -A app.tasks.celery_app worker --autoscale=10,2
 
 # Specific queues
-celery -A app.worker worker -Q etl,cleanup
+celery -A app.tasks.celery_app worker -Q etl,cleanup
 ```
 
 ---
@@ -94,21 +94,21 @@ Beat scheduler menjalankan periodic tasks (cron-like).
 
 **With Worker**:
 ```bash
-celery -A app.worker worker --beat --loglevel=info
+celery -A app.tasks.celery_app worker --beat --loglevel=info
 ```
 
 **Separate Process** (Recommended for production):
 ```bash
 # Terminal 1: Worker
-celery -A app.worker worker --loglevel=info
+celery -A app.tasks.celery_app worker --loglevel=info
 
 # Terminal 2: Beat
-celery -A app.worker beat --loglevel=info
+celery -A app.tasks.celery_app beat --loglevel=info
 ```
 
 ### Scheduled Tasks
 
-Configured in `app/worker.py`:
+Configured in `app/tasks/celery_app.py`:
 
 ```python
 celery_app.conf.beat_schedule = {
@@ -135,7 +135,7 @@ celery_app.conf.beat_schedule = {
 
 **Start Flower**:
 ```bash
-celery -A app.worker flower --port=5555
+celery -A app.tasks.celery_app flower --port=5555
 ```
 
 **Access**: http://localhost:5555
@@ -149,34 +149,34 @@ celery -A app.worker flower --port=5555
 
 **With Authentication**:
 ```bash
-celery -A app.worker flower --basic_auth=admin:password
+celery -A app.tasks.celery_app flower --basic_auth=admin:password
 ```
 
 ### 2. CLI Monitoring
 
 **Active Tasks**:
 ```bash
-celery -A app.worker inspect active
+celery -A app.tasks.celery_app inspect active
 ```
 
 **Registered Tasks**:
 ```bash
-celery -A app.worker inspect registered
+celery -A app.tasks.celery_app inspect registered
 ```
 
 **Worker Stats**:
 ```bash
-celery -A app.worker inspect stats
+celery -A app.tasks.celery_app inspect stats
 ```
 
 **Scheduled Tasks**:
 ```bash
-celery -A app.worker inspect scheduled
+celery -A app.tasks.celery_app inspect scheduled
 ```
 
 **Reserved Tasks**:
 ```bash
-celery -A app.worker inspect reserved
+celery -A app.tasks.celery_app inspect reserved
 ```
 
 ### 3. Task Status (Python)
@@ -208,13 +208,13 @@ print(result.traceback)  # If failed
 
 ```bash
 # ETL worker only
-celery -A app.worker worker -Q etl --loglevel=info --concurrency=4
+celery -A app.tasks.celery_app worker -Q etl --loglevel=info --concurrency=4
 
 # Cleanup worker only
-celery -A app.worker worker -Q cleanup --loglevel=info --concurrency=2
+celery -A app.tasks.celery_app worker -Q cleanup --loglevel=info --concurrency=2
 
 # Multiple queues
-celery -A app.worker worker -Q etl,cleanup --loglevel=info
+celery -A app.tasks.celery_app worker -Q etl,cleanup --loglevel=info
 ```
 
 ### Task Routing
@@ -249,7 +249,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/path/to/fastapi-etl
 Environment="PATH=/path/to/venv/bin"
-ExecStart=/path/to/venv/bin/celery -A app.worker worker \
+ExecStart=/path/to/venv/bin/celery -A app.tasks.celery_app worker \
     --loglevel=info \
     --concurrency=4 \
     --pidfile=/var/run/celery/worker.pid \
@@ -275,7 +275,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/path/to/fastapi-etl
 Environment="PATH=/path/to/venv/bin"
-ExecStart=/path/to/venv/bin/celery -A app.worker beat \
+ExecStart=/path/to/venv/bin/celery -A app.tasks.celery_app beat \
     --loglevel=info \
     --pidfile=/var/run/celery/beat.pid \
     --logfile=/var/log/celery/beat.log
@@ -313,7 +313,7 @@ sudo journalctl -u celery-beat -f
 
 ```ini
 [program:celery-worker]
-command=/path/to/venv/bin/celery -A app.worker worker --loglevel=info --concurrency=4
+command=/path/to/venv/bin/celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
 directory=/path/to/fastapi-etl
 user=www-data
 autostart=true
@@ -322,7 +322,7 @@ redirect_stderr=true
 stdout_logfile=/var/log/celery/worker.log
 
 [program:celery-beat]
-command=/path/to/venv/bin/celery -A app.worker beat --loglevel=info
+command=/path/to/venv/bin/celery -A app.tasks.celery_app beat --loglevel=info
 directory=/path/to/fastapi-etl
 user=www-data
 autostart=true
@@ -331,7 +331,7 @@ redirect_stderr=true
 stdout_logfile=/var/log/celery/beat.log
 
 [program:celery-flower]
-command=/path/to/venv/bin/celery -A app.worker flower --port=5555
+command=/path/to/venv/bin/celery -A app.tasks.celery_app flower --port=5555
 directory=/path/to/fastapi-etl
 user=www-data
 autostart=true
@@ -361,7 +361,7 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info"]
 ```
 
 **docker-compose.yml**:
@@ -369,7 +369,7 @@ CMD ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
 services:
   worker:
     build: .
-    command: celery -A app.worker worker --loglevel=info --concurrency=4
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -378,7 +378,7 @@ services:
   
   beat:
     build: .
-    command: celery -A app.worker beat --loglevel=info
+    command: celery -A app.tasks.celery_app beat --loglevel=info
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
     depends_on:
@@ -386,7 +386,7 @@ services:
   
   flower:
     build: .
-    command: celery -A app.worker flower --port=5555
+    command: celery -A app.tasks.celery_app flower --port=5555
     ports:
       - "5555:5555"
     environment:
@@ -451,25 +451,25 @@ redis-cli ping
 
 **Check Imports**:
 ```bash
-python -c "from app.worker import celery_app; print(celery_app)"
+python -c "from app.tasks.celery_app import celery_app; print(celery_app)"
 ```
 
 **Check Tasks**:
 ```bash
-celery -A app.worker inspect registered
+celery -A app.tasks.celery_app inspect registered
 ```
 
 **Check Logs**:
 ```bash
-celery -A app.worker worker --loglevel=debug
+celery -A app.tasks.celery_app worker --loglevel=debug
 ```
 
 ### Tasks Not Executing
 
 **Check Worker Status**:
 ```bash
-celery -A app.worker inspect active
-celery -A app.worker inspect stats
+celery -A app.tasks.celery_app inspect active
+celery -A app.tasks.celery_app inspect stats
 ```
 
 **Check Task State**:
@@ -486,7 +486,7 @@ if result.failed():
 **Purge Queue**:
 ```bash
 # Clear all pending tasks
-celery -A app.worker purge
+celery -A app.tasks.celery_app purge
 
 # Confirm: yes
 ```
@@ -507,7 +507,7 @@ worker_max_tasks_per_child=1000  # Restart after 1000 tasks
 
 **Monitor Memory**:
 ```bash
-celery -A app.worker inspect stats | grep -i memory
+celery -A app.tasks.celery_app inspect stats | grep -i memory
 ```
 
 ### Slow Task Execution
@@ -515,12 +515,12 @@ celery -A app.worker inspect stats | grep -i memory
 **Check Concurrency**:
 ```bash
 # Increase workers
-celery -A app.worker worker --concurrency=8
+celery -A app.tasks.celery_app worker --concurrency=8
 ```
 
 **Check Queue Length**:
 ```bash
-celery -A app.worker inspect reserved
+celery -A app.tasks.celery_app inspect reserved
 ```
 
 **Check Task Time Limits**:
@@ -537,10 +537,10 @@ task_time_limit=7200  # 2 hours
 
 ```bash
 # ETL worker (high priority, more resources)
-celery -A app.worker worker -Q etl --concurrency=4 --loglevel=info
+celery -A app.tasks.celery_app worker -Q etl --concurrency=4 --loglevel=info
 
 # Cleanup worker (low priority, fewer resources)
-celery -A app.worker worker -Q cleanup --concurrency=2 --loglevel=info
+celery -A app.tasks.celery_app worker -Q cleanup --concurrency=2 --loglevel=info
 ```
 
 ### 2. Set Appropriate Time Limits
@@ -569,10 +569,10 @@ def task_with_retry(self):
 
 ```bash
 # Use Flower for real-time monitoring
-celery -A app.worker flower --port=5555
+celery -A app.tasks.celery_app flower --port=5555
 
 # Check stats regularly
-celery -A app.worker inspect stats
+celery -A app.tasks.celery_app inspect stats
 ```
 
 ### 5. Log Properly
@@ -595,13 +595,13 @@ def my_task():
 **Development**:
 ```bash
 # Run worker
-celery -A app.worker worker --loglevel=debug
+celery -A app.tasks.celery_app worker --loglevel=debug
 
 # Run with beat
-celery -A app.worker worker --beat --loglevel=debug
+celery -A app.tasks.celery_app worker --beat --loglevel=debug
 
 # Run flower
-celery -A app.worker flower
+celery -A app.tasks.celery_app flower
 ```
 
 **Production**:
@@ -610,20 +610,19 @@ celery -A app.worker flower
 sudo systemctl start celery-worker celery-beat
 
 # Monitor with Flower
-celery -A app.worker flower --port=5555 --basic_auth=admin:password
+celery -A app.tasks.celery_app flower --port=5555 --basic_auth=admin:password
 ```
 
 **Monitoring**:
 - Flower UI: http://localhost:5555
-- CLI: `celery -A app.worker inspect`
+- CLI: `celery -A app.tasks.celery_app inspect`
 - Logs: `/var/log/celery/`
 
 **Structure**:
 ```
 app/
-├── worker.py           # Celery entry point
 ├── tasks/
-│   ├── celery_app.py   # Celery configuration
+│   ├── celery_app.py   # Celery configuration & entry point
 │   ├── etl_tasks.py    # ETL tasks
 │   ├── cleanup_tasks.py # Cleanup tasks
 │   └── monitoring_tasks.py # Monitoring tasks
@@ -634,6 +633,6 @@ app/
 ## Support
 
 For issues:
-- Check logs: `celery -A app.worker worker --loglevel=debug`
-- Inspect workers: `celery -A app.worker inspect stats`
+- Check logs: `celery -A app.tasks.celery_app worker --loglevel=debug`
+- Inspect workers: `celery -A app.tasks.celery_app inspect stats`
 - Monitor with Flower: http://localhost:5555

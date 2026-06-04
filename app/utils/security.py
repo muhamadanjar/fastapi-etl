@@ -15,9 +15,12 @@ import bcrypt
 import base64
 import os
 
-from app.core.config import settings
+from app.core.config import get_settings
+
 from app.utils.logger import get_logger
 
+
+settings = get_settings()
 logger = get_logger(__name__)
 
 # Password hashing context

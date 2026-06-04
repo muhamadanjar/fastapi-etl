@@ -7,6 +7,9 @@ services:
       - "8007:8000"
     env_file:
       - .env
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - redis
       - rabbitmq
@@ -18,11 +21,14 @@ services:
       dockerfile: docker/Dockerfile
     env_file:
       - .env
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - redis
       - rabbitmq
       - api
-    command: celery -A app.worker worker --loglevel=info
+    command: celery -A app.tasks.celery_app worker --loglevel=info
 
   celery_flower:
     build:
@@ -37,7 +43,7 @@ services:
       - celery_worker
       - rabbitmq
       - redis
-    command: celery -A app.worker flower --port=5555
+    command: celery -A app.tasks.celery_app flower --port=5555
 
 
   redis:

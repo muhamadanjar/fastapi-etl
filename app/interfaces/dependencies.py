@@ -44,6 +44,9 @@ async def _sync_user_to_db(user_info: RemoteUserInfo) -> None:
 
 
 async def _fetch_user_info(token: str) -> RemoteUserInfo:
+    import logging
+    logger = logging.getLogger(__name__)
+
     cache_key = f"auth_gateway:{token[:32]}"
     cache = await cache_manager.get_cache()
     if cache:
@@ -52,6 +55,9 @@ async def _fetch_user_info(token: str) -> RemoteUserInfo:
             return RemoteUserInfo(**cached)
 
     url = f"{settings.security.usermanagement_api_url}/auth/info"
+
+    # Narrow the try/except to network I/O only — do not let post-response
+    # logic (NameError, ValidationError, etc.) be swallowed as "unreachable".
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -66,19 +72,28 @@ async def _fetch_user_info(token: str) -> RemoteUserInfo:
                         headers={"WWW-Authenticate": "Bearer"},
                     )
                 if resp.status != 200:
+                    logger.error(
+                        "Auth Service returned unexpected status %s for %s",
+                        resp.status,
+                        url,
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Auth service unavailable",
+                        detail="Auth Service unavailable",
                     )
                 body = await resp.json()
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.error("Auth Service unreachable at %s: %s", url, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Auth service unreachable",
         )
 
+    # Post-response processing is intentionally outside the try/except so that
+    # programming errors (bad response shape, ValidationError) surface as 500s,
+    # not as misleading 503s.
     user_data = body.get("data") or body
     user_info = RemoteUserInfo(**user_data)
 

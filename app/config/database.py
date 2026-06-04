@@ -10,6 +10,7 @@ Features:
 - Easy configuration via env (nested + legacy alias)
 """
 
+from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import quote_plus
 import logging
@@ -18,6 +19,8 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+_BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class DatabaseSettings(BaseSettings):
@@ -71,7 +74,7 @@ class DatabaseSettings(BaseSettings):
     debug: bool = Field(default=False, description="Database debug flag")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_BASE_DIR / ".env"),
         env_file_encoding="utf-8",
         env_prefix="DATABASE_",
         extra="ignore",

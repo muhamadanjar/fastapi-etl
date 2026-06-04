@@ -120,20 +120,45 @@ class CelerySettings(BaseSettings):
     (e.g. "json,application/json").  Access the parsed list via the @property helper.
     """
 
-    broker_url: Optional[str] = Field(default=None, env="CELERY_BROKER_URL")
-    result_backend: Optional[str] = Field(default=None, env="CELERY_RESULT_BACKEND")
-    task_serializer: str = Field(default="json", env="CELERY_TASK_SERIALIZER")
+    broker_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("CELERY_BROKER_URL", "celery_broker_url"),
+    )
+    result_backend: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("CELERY_RESULT_BACKEND", "celery_result_backend"),
+    )
+    task_serializer: str = Field(
+        default="json",
+        validation_alias=AliasChoices("CELERY_TASK_SERIALIZER", "celery_task_serializer"),
+    )
     # Raw string — avoids pydantic-settings JSON-decode attempt on CSV env values
-    CELERY_ACCEPT_CONTENT: str = Field(default="json", env="CELERY_ACCEPT_CONTENT")
-    result_serializer: str = Field(default="json", env="CELERY_RESULT_SERIALIZER")
-    timezone: str = Field(default="UTC", env="CELERY_TIMEZONE")
-    enable_utc: bool = Field(default=True, env="CELERY_ENABLE_UTC")
-    SEND_TASK_FAILURE_NOTIFICATIONS: bool = Field(default=True, env="SEND_TASK_FAILURE_NOTIFICATIONS")
+    CELERY_ACCEPT_CONTENT: str = Field(
+        default="json",
+        validation_alias=AliasChoices("CELERY_ACCEPT_CONTENT", "celery_accept_content"),
+    )
+    result_serializer: str = Field(
+        default="json",
+        validation_alias=AliasChoices("CELERY_RESULT_SERIALIZER", "celery_result_serializer"),
+    )
+    timezone: str = Field(
+        default="UTC",
+        validation_alias=AliasChoices("CELERY_TIMEZONE", "celery_timezone"),
+    )
+    enable_utc: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("CELERY_ENABLE_UTC", "celery_enable_utc"),
+    )
+    SEND_TASK_FAILURE_NOTIFICATIONS: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SEND_TASK_FAILURE_NOTIFICATIONS", "send_task_failure_notifications"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),
         extra="ignore",
         env_file_encoding="utf-8",
+        populate_by_name=True,
     )
 
     @property
@@ -301,9 +326,11 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
-celery_settings = CelerySettings()
-
-@lru_cache
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Get cached settings instance. Loads from .env on first call."""
     return Settings()
+
+
+# Module-level singleton — allows `from app.core.config import settings`
+settings = get_settings()

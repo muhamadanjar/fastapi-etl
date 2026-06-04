@@ -17,13 +17,13 @@ import pandas as pd
 import requests
 
 from .celery_app import celery_app
-from app.infrastructure.db.session import get_session
+from app.infrastructure.db.manager import get_session
 from app.infrastructure.db.models.etl_control.job_executions import JobExecution
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.etl_control.quality_check_results import QualityCheckResult
 from app.utils.logger import get_logger
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.exceptions import MonitoringException
 
 # Import error logging helpers
@@ -31,6 +31,7 @@ from app.tasks.task_helpers import log_task_error, get_error_type_from_exception
 from app.infrastructure.db.models.etl_control.error_logs import ErrorType, ErrorSeverity
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 @celery_app.task(
     bind=True,
@@ -495,10 +496,9 @@ def send_alert_notifications(self, alert_type: str = None, data: Dict[str, Any] 
         
     except Exception as e:
         logger.error(f"Alert notification task failed: {str(e)}")
-        
+
         # Log error to database
         try:
-            from app.infrastructure.db.manager import get_session
             with get_session() as db:
                 asyncio.run(log_task_error(
                     db=db,
@@ -513,7 +513,7 @@ def send_alert_notifications(self, alert_type: str = None, data: Dict[str, Any] 
                 ))
         except Exception as log_error:
             logger.error(f"Failed to log error to database: {log_error}")
-        
+
         raise MonitoringException(f"Alert notification failed: {str(e)}")
 
 @celery_app.task(
@@ -576,10 +576,9 @@ def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None):
         
     except Exception as e:
         logger.error(f"Log cleanup failed: {str(e)}")
-        
+
         # Log error to database
         try:
-            from app.infrastructure.db.manager import get_session
             with get_session() as db:
                 asyncio.run(log_task_error(
                     db=db,
@@ -594,7 +593,7 @@ def cleanup_old_logs(self, days_old: int = 30, log_types: List[str] = None):
                 ))
         except Exception as log_error:
             logger.error(f"Failed to log error to database: {log_error}")
-        
+
         raise MonitoringException(f"Log cleanup failed: {str(e)}")
 
 # Helper functions for monitoring tasks

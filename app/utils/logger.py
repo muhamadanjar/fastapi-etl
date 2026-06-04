@@ -12,7 +12,11 @@ from typing import Optional
 from pathlib import Path
 import json
 
-from app.core.config import settings
+from app.core.config import get_settings
+
+settings = get_settings()
+
+
 
 
 class JSONFormatter(logging.Formatter):
