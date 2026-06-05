@@ -44,6 +44,7 @@ async def batch_upload(
         'text/csv',
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/wps-office.xls',
         'application/json',
         'application/xml',
         'text/xml'
@@ -109,6 +110,7 @@ async def upload_file(
         'text/csv',
         'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/wps-office.xls',
         'application/json',
         'application/xml',
         'text/xml'
