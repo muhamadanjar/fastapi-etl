@@ -45,30 +45,44 @@ class Command(BaseCommand):
     def _get_shell_context(self):
         """Get context variables for the shell"""
         context = {}
-        
+
         try:
-            # Import your app modules here
-            # from app.main import app
-            # from app.database import get_db
-            # from app.models import User, Post
-            
-            # context.update({
-            #     'app': app,
-            #     'get_db': get_db,
-            #     'User': User,
-            #     'Post': Post,
-            # })
-            
-            # Placeholder context
+            # Import app modules
+            from app.main import app
+            from app.infrastructure.db.manager import database_manager
+            from app.infrastructure.cache import cache_manager
+
+            # Create db session
+            db_session = database_manager.get_session()
+
+            # Import models for convenience
+            from app.infrastructure.db.models.auth import User
+            from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
+            from app.infrastructure.db.models.etl_control.job_executions import JobExecution
+            from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
+
             context.update({
-                'app': 'FastAPI App Instance',
-                'db': 'Database Session',
-                'models': 'Your Models Here'
+                'app': app,
+                'db': db_session,
+                'cache': cache_manager,
+                'database_manager': database_manager,
+                # Models
+                'User': User,
+                'EtlJob': EtlJob,
+                'JobExecution': JobExecution,
+                'FileRegistry': FileRegistry,
             })
-            
+
+            self.print_success("Database session loaded and auto-available as 'db'")
+
         except ImportError as e:
             self.print_warning(f"Could not import some modules: {e}")
-        
+            context.update({
+                'app': 'FastAPI App Instance',
+                'db': None,
+                'cache': None,
+            })
+
         return context
     
     def _has_ipython(self):
@@ -82,15 +96,20 @@ class Command(BaseCommand):
     def _start_ipython_shell(self, context):
         """Start IPython shell"""
         try:
-            import IPython
-            
+            import IPython  # noqa: F401
+
             self.print_info("Starting IPython shell...")
             self.print_info("Available variables:")
             for key, value in context.items():
-                print(f"  {key}: {value}")
-            
-            IPython.start_ipython(argv=[], user_ns=context)
-            
+                if value is None:
+                    print(f"  {key}: {value}")
+                elif isinstance(value, str):
+                    print(f"  {key}: {value}")
+                else:
+                    print(f"  {key}: <{type(value).__name__}>")
+
+            IPython.start_ipython(argv=[], user_ns=context, display_banner=True)
+
         except ImportError:
             self.print_error("IPython not available. Install it with: pip install ipython")
             self._start_plain_shell(context)
@@ -100,16 +119,29 @@ class Command(BaseCommand):
         self.print_info("Starting Python shell...")
         self.print_info("Available variables:")
         for key, value in context.items():
-            print(f"  {key}: {value}")
-        
-        # Banner
-        banner = """
-FastAPI Interactive Shell
-=========================
-Your app context has been loaded.
-Type 'help()' for Python help, or 'exit()' to quit.
+            if value is None:
+                print(f"  {key}: {value}")
+            elif isinstance(value, str):
+                print(f"  {key}: {value}")
+            else:
+                print(f"  {key}: <{type(value).__name__}>")
+
+        shell_banner = """
+╔════════════════════════════════════════════════════════════╗
+║  ETL API Interactive Shell (Python)                        ║
+╠════════════════════════════════════════════════════════════╣
+║  Database Session: db                                      ║
+║  Cache Manager: cache                                      ║
+║  FastAPI App: app                                          ║
+║                                                            ║
+║  Useful commands:                                          ║
+║    db.query(User).all()       - Query users               ║
+║    cache.get('key')            - Get from cache           ║
+║    cache.set('key', val, ttl)  - Set in cache            ║
+║                                                            ║
+║  Type 'exit()' or Ctrl+D to quit                           ║
+╚════════════════════════════════════════════════════════════╝
 """
-        
-        # Start interactive console
+
         console = code.InteractiveConsole(locals=context)
-        console.interact(banner=banner)
+        console.interact(banner=shell_banner)

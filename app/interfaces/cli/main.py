@@ -7,6 +7,7 @@ Entry point untuk semua command CLI
 import sys
 import os
 import importlib
+import importlib.util
 from pathlib import Path
 from typing import Dict, Any
 import argparse

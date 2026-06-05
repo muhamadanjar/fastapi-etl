@@ -38,6 +38,7 @@ greenlet==3.2.2
 h11==0.16.0
 idna==3.10
 ijson==3.4.0
+ipython==8.35.0
 ipython_pygments_lexers==1.1.1
 jedi==0.19.2
 kombu==5.5.3
