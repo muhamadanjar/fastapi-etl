@@ -17,6 +17,7 @@ from app.infrastructure.db.manager import get_session_dependency
 
 router = APIRouter()
 
+# Exact path routes first (highest specificity)
 @router.post("/upload/session", response_model=InitUploadSessionResponse)
 async def init_upload_session(
     request: InitUploadSessionRequest,
@@ -28,41 +29,53 @@ async def init_upload_session(
     return await service.init_upload_session(request, user_id=current_user.id)
 
 
-@router.post("/upload", response_model=FileUploadResponse)
-async def upload_file(
-    file: UploadFile = File(...),
+@router.post("/batch-upload")
+async def batch_upload(
+    files: List[UploadFile] = File(...),
     source_system: str = Query(..., description="Source system name"),
     batch_id: Optional[str] = Query(None, description="Batch ID for grouping files"),
-    metadata: Optional[str] = Query(None, description="Additional metadata as JSON string"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
-) -> FileUploadResponse:
-    """Upload a file for ETL processing"""
-    file_service = FileService(db)
-    
-    # Validate file type
+) -> Dict[str, Any]:
+    """Upload multiple files in a batch"""
+
+    # Validate all files first
     allowed_types = [
-        'text/csv', 
-        'application/vnd.ms-excel', 
+        'text/csv',
+        'application/vnd.ms-excel',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/json', 
-        'application/xml', 
+        'application/json',
+        'application/xml',
         'text/xml'
     ]
-    
-    if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {file.content_type} not supported. Allowed types: {', '.join(allowed_types)}"
-        )
-    
-    return await file_service.upload_file(
-        file=file,
+
+    for file in files:
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File {file.filename} has unsupported type {file.content_type}"
+            )
+
+    file_service = FileService(db)
+    return await file_service.batch_upload(
+        files=files,
         source_system=source_system,
         batch_id=batch_id,
-        metadata=metadata,
         user_id=current_user.id
     )
+
+
+# Routes with path parameters (more specific before generic)
+@router.get("/upload/session/{session_id}", response_model=UploadSessionStatusResponse)
+async def get_upload_session_status(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency),
+) -> UploadSessionStatusResponse:
+    """Get current status of upload session (for resume capability)"""
+    service = FileService(db)
+    return await service.get_upload_session_status(session_id)
+
 
 @router.post("/upload/{session_id}/{chunk_index}", response_model=ChunkUploadResponse)
 async def chunk_upload(
@@ -78,15 +91,42 @@ async def chunk_upload(
     return await service.upload_chunk(session_id, chunk_index, chunk_data)
 
 
-@router.get("/upload/session/{session_id}", response_model=UploadSessionStatusResponse)
-async def get_upload_session_status(
-    session_id: UUID,
+# Generic routes last (lowest specificity)
+@router.post("/upload", response_model=FileUploadResponse)
+async def upload_file(
+    file: UploadFile = File(...),
+    source_system: str = Query(..., description="Source system name"),
+    batch_id: Optional[str] = Query(None, description="Batch ID for grouping files"),
+    metadata: Optional[str] = Query(None, description="Additional metadata as JSON string"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session_dependency),
-) -> UploadSessionStatusResponse:
-    """Get current status of upload session (for resume capability)"""
-    service = FileService(db)
-    return await service.get_upload_session_status(session_id)
+    db: Session = Depends(get_session_dependency)
+) -> FileUploadResponse:
+    """Upload a file for ETL processing"""
+    file_service = FileService(db)
+
+    # Validate file type
+    allowed_types = [
+        'text/csv',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/json',
+        'application/xml',
+        'text/xml'
+    ]
+
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type {file.content_type} not supported. Allowed types: {', '.join(allowed_types)}"
+        )
+
+    return await file_service.upload_file(
+        file=file,
+        source_system=source_system,
+        batch_id=batch_id,
+        metadata=metadata,
+        user_id=current_user.id
+    )
 
 
 @router.get("/", response_model=FileListResponse)
@@ -111,71 +151,8 @@ async def list_files(
         batch_id=batch_id
     )
 
-@router.get("/{file_id}", response_model=FileDetailResponse)
-async def get_file_detail(
-    file_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session_dependency)
-) -> FileDetailResponse:
-    """Get detailed information about a specific file"""
-    file_service = FileService(db)
-    file_detail = await file_service.get_file_detail(file_id)
-    
-    if not file_detail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
-        )
-    
-    return file_detail
 
-@router.post("/{file_id}/process")
-async def process_file(
-    file_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session_dependency)
-) -> Dict[str, str]:
-    """Start processing a specific file"""
-    try:
-        file_service = FileService(db)
-        task_id = await file_service.start_file_processing(file_id, current_user.id)
-        
-        return {
-            "message": "File processing started",
-            "file_id": str(file_id),
-            "task_id": task_id,
-            "status": "processing"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-@router.delete("/{file_id}")
-async def delete_file(
-    file_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session_dependency)
-) -> Dict[str, str]:
-    """Delete a file and its associated data"""
-    try:
-        file_service = FileService(db)
-        success = await file_service.delete_file(file_id, current_user.id)
-        
-        if success:
-            return {"message": "File deleted successfully", "file_id": str(file_id)}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete file"
-            )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
+# File ID routes: specific suffixes before generic
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: UUID,
@@ -191,6 +168,7 @@ async def download_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+
 
 @router.get("/{file_id}/preview")
 async def preview_file_data(
@@ -209,40 +187,6 @@ async def preview_file_data(
             detail=str(e)
         )
 
-@router.post("/batch-upload")
-async def batch_upload(
-    files: List[UploadFile] = File(...),
-    source_system: str = Query(..., description="Source system name"),
-    batch_id: Optional[str] = Query(None, description="Batch ID for grouping files"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session_dependency)
-) -> Dict[str, Any]:
-    """Upload multiple files in a batch"""
-    
-    # Validate all files first
-    allowed_types = [
-        'text/csv', 
-        'application/vnd.ms-excel', 
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/json', 
-        'application/xml', 
-        'text/xml'
-    ]
-    
-    for file in files:
-        if file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File {file.filename} has unsupported type {file.content_type}"
-            )
-    
-    file_service = FileService(db)
-    return await file_service.batch_upload(
-        files=files,
-        source_system=source_system,
-        batch_id=batch_id,
-        user_id=current_user.id
-    )
 
 @router.get("/{file_id}/processing-status")
 async def get_processing_status(
@@ -254,13 +198,13 @@ async def get_processing_status(
     try:
         file_service = FileService(db)
         file_detail = await file_service.get_file_detail(file_id)
-        
+
         if not file_detail:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="File not found"
             )
-        
+
         return {
             "file_id": file_id,
             "file_name": file_detail.file.file_name,
@@ -278,6 +222,31 @@ async def get_processing_status(
             detail=str(e)
         )
 
+
+@router.post("/{file_id}/process")
+async def process_file(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, str]:
+    """Start processing a specific file"""
+    try:
+        file_service = FileService(db)
+        task_id = await file_service.start_file_processing(file_id, current_user.id)
+
+        return {
+            "message": "File processing started",
+            "file_id": str(file_id),
+            "task_id": task_id,
+            "status": "processing"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
 @router.post("/{file_id}/reprocess")
 async def reprocess_file(
     file_id: UUID,
@@ -288,13 +257,57 @@ async def reprocess_file(
     try:
         file_service = FileService(db)
         task_id = await file_service.start_file_processing(file_id, current_user.id)
-        
+
         return {
             "message": "File reprocessing started",
             "file_id": str(file_id),
             "task_id": task_id,
             "status": "processing"
         }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/{file_id}", response_model=FileDetailResponse)
+async def get_file_detail(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> FileDetailResponse:
+    """Get detailed information about a specific file"""
+    file_service = FileService(db)
+    file_detail = await file_service.get_file_detail(file_id)
+
+    if not file_detail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    return file_detail
+
+
+@router.delete("/{file_id}")
+async def delete_file(
+    file_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency)
+) -> Dict[str, str]:
+    """Delete a file and its associated data"""
+    try:
+        file_service = FileService(db)
+        success = await file_service.delete_file(file_id, current_user.id)
+
+        if success:
+            return {"message": "File deleted successfully", "file_id": str(file_id)}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to delete file"
+            )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
