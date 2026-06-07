@@ -1,7 +1,7 @@
 """add missing tables for etl system
 
-Revision ID: a1b2c3d4e5f6
-Revises: e7e5b2e30a6b
+Revision ID: 0002_add_missing_tables
+Revises: 0001_initial
 Create Date: 2025-11-22 16:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, None] = 'e7e5b2e30a6b'
+revision: str = '0002_add_missing_tables'
+down_revision: Union[str, None] = '0001_initial'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

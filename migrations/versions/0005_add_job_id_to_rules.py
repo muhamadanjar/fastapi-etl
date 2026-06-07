@@ -1,7 +1,7 @@
 """add job_id to transformation_rules and quality_rules
 
-Revision ID: c3d4e5f6a7b2
-Revises: b2c3d4e5f6a1
+Revision ID: 0005_add_job_id_to_rules
+Revises: 0004_fix_phase5_6_models
 Create Date: 2026-05-21 20:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'c3d4e5f6a7b2'
-down_revision: Union[str, None] = 'b2c3d4e5f6a1'
+revision: str = '0005_add_job_id_to_rules'
+down_revision: Union[str, None] = '0004_fix_phase5_6_models'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

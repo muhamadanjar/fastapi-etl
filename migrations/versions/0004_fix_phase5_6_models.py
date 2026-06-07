@@ -1,7 +1,7 @@
 """fix Phase 5-6 models: add validation_status, duplicate_count, master_entity_id, job_id
 
-Revision ID: b2c3d4e5f6a1
-Revises: f1e2d3c4b5a6
+Revision ID: 0004_fix_phase5_6_models
+Revises: 0003_add_upload_sessions
 Create Date: 2026-05-21 10:00:00.000000
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'b2c3d4e5f6a1'
-down_revision: Union[str, None] = 'f1e2d3c4b5a6'
+revision: str = '0004_fix_phase5_6_models'
+down_revision: Union[str, None] = '0003_add_upload_sessions'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
