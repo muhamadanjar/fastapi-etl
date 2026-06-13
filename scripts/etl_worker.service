@@ -1,0 +1,22 @@
+[Unit]
+Description=ETL Celery Service
+After=network.target
+
+[Service]
+Type=forking
+User=root
+Group=www-data
+EnvironmentFile=/opt/etl_celery.conf
+WorkingDirectory=/var/www/fastapi-etl
+
+ExecStart=/bin/sh -c 'cd ${CELERYD_CHDIR} && ${CELERY_BIN} -A ${CELERY_APP} multi start worker \
+  --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} ${CELERYD_OPTS}'
+ExecStop=/bin/sh -c 'cd ${CELERYD_CHDIR} && ${CELERY_BIN} multi stopwait worker \
+  --pidfile=${CELERYD_PID_FILE}'
+ExecReload=/bin/sh -c 'cd ${CELERYD_CHDIR} && ${CELERY_BIN} multi restart worker \
+  --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} ${CELERYD_OPTS}'
+Restart=always
+
+
+[Install]
+WantedBy=multi-user.target
