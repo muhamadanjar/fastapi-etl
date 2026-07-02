@@ -1,8 +1,9 @@
 # FastAPI-ETL Quick Reference
 
-**Last Updated:** 2026-05-02  
+**Last Updated:** 2026-07-02  
 **Status:** ✅ Production Ready  
-**Version:** 1.0.0
+**Version:** 1.1.0  
+**CLI Framework:** Typer + Rich (refactored from argparse/click)
 
 ---
 
@@ -40,6 +41,38 @@ Reference:
 ---
 
 ## 🚀 Quick Start
+
+### CLI Commands (manage.py)
+```bash
+# Dev server
+python manage.py runserver --reload
+
+# Interactive shell with app context
+python manage.py shell
+
+# Database
+python manage.py migrate              # Run migrations
+python manage.py seed                  # Seed sample data
+
+# Cache
+python manage.py clear-cache --pattern "job:*"
+
+# Workers
+python manage.py worker start          # Start all workers
+python manage.py worker status         # Check worker status
+
+# Tasks
+python manage.py task list             # List recent tasks
+python manage.py task stats            # Task statistics
+
+# Monitoring
+python manage.py flower                # Flower dashboard :5555
+
+# Full help
+python manage.py --help
+```
+
+> Panduan lengkap: [`docs/CLI_GUIDE.md`](./CLI_GUIDE.md)
 
 ### Verify Implementation
 ```bash
