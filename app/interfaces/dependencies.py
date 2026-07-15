@@ -49,6 +49,7 @@ async def _fetch_user_info(token: str) -> RemoteUserInfo:
 
     cache_key = f"auth_gateway:{token[:32]}"
     cache = await cache_manager.get_cache()
+    print("CACHE DATA", cache)
     if cache:
         cached = await cache.get(cache_key)
         if cached:

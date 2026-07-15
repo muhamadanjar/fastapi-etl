@@ -365,6 +365,110 @@ def get_mime_type(file_path: Union[str, Path]) -> str:
         return "application/octet-stream"
 
 
+# MIME types that are definitively dangerous / unsupported for ETL ingestion.
+# If a file's *actual* content (magic bytes) matches one of these, we reject it
+# regardless of the client-declared Content-Type or file extension. This closes
+# the Content-Type / extension Spoofing gap (OWASP A09 - Security Logging &
+# Monitoring Failures / file-upload validation bypass).
+DANGEROUS_MAGIC_MIME_EXACT = {
+    "application/x-msdownload",
+    "application/x-dosexec",
+    "application/x-executable",
+    "application/x-sharedlib",
+    "application/x-mach-binary",
+    "application/x-shellscript",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-msdos-program",
+    "application/x-object",
+}
+
+DANGEROUS_MAGIC_MIME_PREFIXES = (
+    "application/x-executable",
+    "application/x-dosexec",
+    "application/x-sharedlib",
+    "application/x-mach-binary",
+    "application/x-shellscript",
+    "application/x-perl",
+    "application/x-python",
+    "application/x-php",
+    "application/x-ruby",
+    "application/x-msdownload",
+    "application/x-msdos-program",
+)
+
+
+def get_magic_mime(file_path: Union[str, Path]) -> Optional[str]:
+    """
+    Return the REAL MIME type of a file from its magic bytes (not the extension
+    or the client-declared Content-Type).
+
+    Args:
+        file_path: Path to the file
+
+    Returns:
+        MIME type string, or None if it cannot be determined
+    """
+    try:
+        return magic.from_file(str(file_path), mime=True) or None
+    except Exception as e:
+        logger.log_error("get_magic_mime", e, {"file_path": str(file_path)})
+        return None
+
+
+def is_dangerous_content(file_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
+    """
+    Detect whether a file's REAL content is dangerous (executable / script).
+
+    This is the core defence against Content-Type spoofing: a client may send
+    `Content-Type: text/csv` with a `.exe` body, but the magic bytes will
+    reveal the truth.
+
+    Returns:
+        (is_dangerous, detected_mime)
+    """
+    try:
+        mime = get_magic_mime(file_path)
+        if not mime:
+            return False, None
+        mime = mime.lower()
+        if mime in DANGEROUS_MAGIC_MIME_EXACT:
+            return True, mime
+        for prefix in DANGEROUS_MAGIC_MIME_PREFIXES:
+            if mime.startswith(prefix):
+                return True, mime
+        return False, mime
+    except Exception as e:
+        logger.log_error("is_dangerous_content", e, {"file_path": str(file_path)})
+        return False, None
+
+
+def validate_file_content(
+    file_path: Union[str, Path], declared_ext: str
+) -> Tuple[bool, str]:
+    """
+    Validate uploaded file content against spoofing / dangerous payloads.
+
+    - Rejects files whose REAL content (magic bytes) is an executable or script,
+      regardless of the claimed Content-Type or extension.
+    - This prevents uploading an `.exe` disguised as `.csv`.
+
+    Args:
+        file_path: Path to the saved file on disk
+        declared_ext: The extension claimed by the client (e.g. '.csv')
+
+    Returns:
+        (is_valid, detail_message)
+    """
+    dangerous, detected = is_dangerous_content(file_path)
+    if dangerous:
+        return (
+            False,
+            f"File content is dangerous/executable (detected MIME: {detected}). "
+            f"Upload rejected (possible Content-Type spoofing).",
+        )
+    return True, f"content validated ({detected})"
+
+
 def get_file_type(content_type: str) -> str:
     """
     Determine the file type based on MIME content type.

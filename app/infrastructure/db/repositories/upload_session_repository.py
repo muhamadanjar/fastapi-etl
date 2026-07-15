@@ -2,7 +2,7 @@ from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import Session, select
-from sqlalchemy import update as sa_update
+from sqlalchemy import update as sa_update, select as sa_select
 from app.infrastructure.db.models.raw_data.upload_session import UploadSession, UploadSessionStatus
 from app.infrastructure.db.repositories.base import BaseRepository
 
@@ -20,8 +20,17 @@ class UploadSessionRepository(BaseRepository[UploadSession]):
         received_bytes: int,
         uploaded_chunks: int
     ) -> Optional[UploadSession]:
-        """Update chunk_map, received_bytes, and uploaded_chunks"""
-        session = await self.get(session_id)
+        """Update chunk_map, received_bytes, and uploaded_chunks.
+
+        Uses a row-level lock (SELECT ... FOR UPDATE) so concurrent chunk
+        uploads for the same session cannot lose updates on chunk_map /
+        received_bytes (race condition fix).
+        """
+        # Lock the row to serialize concurrent chunk updates for this session.
+        locked = await self.session.execute(
+            sa_select(UploadSession).where(UploadSession.id == session_id).with_for_update()
+        )
+        session = locked.scalars().first()
         if not session:
             return None
 

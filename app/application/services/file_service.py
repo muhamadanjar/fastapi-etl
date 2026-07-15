@@ -35,7 +35,8 @@ from app.schemas.upload_session import (
 from app.core.exceptions import FileError, ServiceError, AppException
 from app.core.enums import ProcessingStatus, FileTypeEnum
 from app.core.config import get_settings
-from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size
+from app.utils.file_utils import get_file_type, calculate_file_hash, validate_file_size, validate_file_content
+from app.utils.security import sanitize_filename_for_security
 from app.utils.date_utils import get_current_timestamp
 from app.infrastructure.storage.local_storage import LocalFileStorage
 # Processor imports are deferred inside _get_processor() to break the circular
@@ -49,13 +50,17 @@ class FileService(BaseService):
     
     def __init__(self, db: Session):
         super().__init__(db)
-        self.upload_dir = Path("storage/uploads")
-        self.processed_dir = Path("storage/processed")
+        # Resolve to absolute paths so stored FileRegistry.file_path stays
+        # valid regardless of the process CWD (avoids orphaned files when the
+        # Celery worker runs from a different directory).
+        storage_base = Path(settings.storage_settings.local_storage_path).resolve()
+        self.upload_dir = storage_base / "uploads"
+        self.processed_dir = storage_base / "processed"
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         self.repo = FileRegistryRepository(db)
         self.upload_session_repo = UploadSessionRepository(db)
-        self.storage = LocalFileStorage(base_path="storage")
+        self.storage = LocalFileStorage(base_path=str(storage_base))
     
     def get_service_name(self) -> str:
         return "FileService"
@@ -99,7 +104,18 @@ class FileService(BaseService):
             
             # Save file to storage
             file_size = await self._save_uploaded_file(file, file_path)
-            
+
+            # SECURITY: validate REAL file content (magic bytes), not the
+            # client-declared Content-Type. Rejects executable/script payloads
+            # disguised as CSV/JSON/XML (Content-Type Spoofing mitigation).
+            content_ok, content_detail = validate_file_content(
+                file_path, Path(file.filename).suffix.lower()
+            )
+            if not content_ok:
+                if file_path.exists():
+                    file_path.unlink()
+                raise FileError(content_detail)
+
             # Validate file size
             validate_file_size(file_path)
             
@@ -359,6 +375,11 @@ class FileService(BaseService):
             
             # Delete physical file
             file_path = Path(file_registry.file_path)
+            # Tolerate legacy relative paths stored before absolute resolution.
+            if not file_path.is_absolute() and not file_path.exists():
+                file_path = (
+                    Path(settings.storage_settings.local_storage_path).resolve() / file_registry.file_path
+                )
             if file_path.exists():
                 file_path.unlink()
             
@@ -386,12 +407,17 @@ class FileService(BaseService):
                 raise FileError("File not found")
             
             file_path = Path(file_registry.file_path)
+            # Tolerate legacy relative paths stored before absolute resolution.
+            if not file_path.is_absolute() and not file_path.exists():
+                file_path = (
+                    Path(settings.storage_settings.local_storage_path).resolve() / file_registry.file_path
+                )
             if not file_path.exists():
                 raise FileError("Physical file not found")
             
             return FileResponse(
                 path=str(file_path),
-                filename=file_registry.file_name,
+                filename=sanitize_filename_for_security(file_registry.file_name),
                 media_type='application/octet-stream'
             )
             
@@ -789,6 +815,19 @@ class FileService(BaseService):
                 output_filename=session.file_name,
                 subfolder=None,
             )
+
+            # SECURITY: validate REAL file content (magic bytes) of the assembled
+            # file. Chunked uploads carry the type in the request body, which is
+            # client-controlled, so we must verify the actual bytes (Content-Type
+            # Spoofing mitigation for the chunked path).
+            content_ok, content_detail = validate_file_content(
+                file_info.file_path, Path(session.file_name).suffix.lower()
+            )
+            if not content_ok:
+                self.storage.cleanup_chunks(str(session.id))
+                if Path(file_info.file_path).exists():
+                    Path(file_info.file_path).unlink()
+                raise FileError(content_detail)
 
             # Create FileRegistry
             file_registry_data = {

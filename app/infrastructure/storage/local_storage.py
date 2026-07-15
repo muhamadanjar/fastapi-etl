@@ -73,7 +73,11 @@ class LocalFileStorage:
             max_file_size: Maximum file size in bytes
             preserve_filename: Whether to preserve original filenames
         """
-        self.base_path = Path(base_path or settings.storage.local_storage_path)
+        # Resolve to an absolute path so that stored file paths remain valid
+        # regardless of the current working directory (e.g. when the Celery
+        # worker runs from a different CWD, preventing orphaned files / missing
+        # files on delete/download).
+        self.base_path = Path(base_path or settings.storage.local_storage_path).resolve()
         self.create_dirs = create_dirs
         self.allowed_extensions = allowed_extensions
         self.max_file_size = max_file_size
@@ -685,8 +689,18 @@ class LocalFileStorage:
             if not chunks_dir.exists():
                 raise FileStorageError(f"Chunks directory not found: {chunks_dir}")
 
-            # Get all chunk files and sort by offset
-            chunk_files = sorted(chunks_dir.glob("chunk_*"), key=lambda x: int(x.name.split("_")[1]))
+            # Get all chunk files and sort by offset.
+            # Only consider strict "chunk_<offset>" names; ignore stray files
+            # that could crash the int() parse below.
+            chunk_files = []
+            for cf in chunks_dir.glob("chunk_*"):
+                parts = cf.name.split("_")
+                if len(parts) == 2 and parts[1].isdigit():
+                    chunk_files.append(cf)
+            chunk_files.sort(key=lambda x: int(x.name.split("_")[1]))
+
+            if not chunk_files:
+                raise FileStorageError(f"No valid chunk files found in: {chunks_dir}")
 
             # Assemble chunks
             assembled_data = b""
