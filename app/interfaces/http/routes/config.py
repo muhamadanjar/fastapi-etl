@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from sqlmodel import Session
-from app.interfaces.dependencies import get_current_user
+from app.interfaces.dependencies import get_current_user, require_roles
 from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.config_service import ConfigService
 from app.schemas.remote_user import RemoteUserInfo as User
@@ -73,7 +73,7 @@ async def list_data_sources(
 @router.post("/data-sources")
 async def create_data_source(
     data: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles()),
     db: Session = Depends(get_session_dependency)
 ):
     """Create a new data source"""
@@ -103,7 +103,7 @@ async def get_data_source(
 async def update_data_source(
     source_id: UUID,
     data: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles()),
     db: Session = Depends(get_session_dependency)
 ):
     """Update a data source"""
@@ -115,7 +115,7 @@ async def update_data_source(
 @router.delete("/data-sources/{source_id}")
 async def delete_data_source(
     source_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles()),
     db: Session = Depends(get_session_dependency)
 ):
     """Delete a data source (soft delete)"""

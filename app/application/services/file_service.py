@@ -237,13 +237,17 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_list")
     
-    async def get_file_detail(self, file_id: UUID) -> Optional[FileDetailResponse]:
+    async def get_file_detail(self, file_id: UUID, user_id: Optional[UUID] = None) -> Optional[FileDetailResponse]:
         """Get detailed information tentang file."""
         try:
             self.log_operation("get_file_detail", {"file_id": file_id})
             
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
+                return None
+            
+            # AUTHORIZATION: enforce ownership (prevent metadata IDOR).
+            if user_id and file_registry.created_by and file_registry.created_by != str(user_id):
                 return None
             
             # Get raw records count
@@ -342,6 +346,10 @@ class FileService(BaseService):
             if not file_registry:
                 raise FileError("File not found")
             
+            # AUTHORIZATION: enforce ownership (prevent IDOR on processing).
+            if file_registry.created_by and file_registry.created_by != str(user_id):
+                raise FileError("You are not authorized to process this file")
+            
             if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
                 raise FileError("File is already being processed")
             
@@ -372,6 +380,11 @@ class FileService(BaseService):
             
             if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
                 raise FileError("Cannot delete file while processing")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR — users must only
+            # act on their own files).
+            if file_registry.created_by and file_registry.created_by != str(user_id):
+                raise FileError("You are not authorized to delete this file")
             
             # Delete physical file
             file_path = Path(file_registry.file_path)
@@ -406,6 +419,10 @@ class FileService(BaseService):
             if not file_registry:
                 raise FileError("File not found")
             
+            # AUTHORIZATION: enforce ownership (prevent IDOR on file download).
+            if file_registry.created_by and file_registry.created_by != str(user_id):
+                raise FileError("You are not authorized to download this file")
+            
             file_path = Path(file_registry.file_path)
             # Tolerate legacy relative paths stored before absolute resolution.
             if not file_path.is_absolute() and not file_path.exists():
@@ -432,6 +449,10 @@ class FileService(BaseService):
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR on data preview).
+            if file_registry.created_by and file_registry.created_by != str(user_id):
+                raise FileError("You are not authorized to preview this file")
             
             file_path = Path(file_registry.file_path)
             if not file_path.exists():
