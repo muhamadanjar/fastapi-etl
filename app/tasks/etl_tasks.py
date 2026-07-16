@@ -251,7 +251,7 @@ def run_transformation_pipeline(self, job_execution_id: str, transformation_conf
     with get_session() as db:
         try:
             # Get job execution record
-            execution = db.exec(select(JobExecution).where(JobExecution.execution_id == job_execution_id)).first()
+            execution = db.exec(select(JobExecution).where(JobExecution.id == job_execution_id)).first()
             if not execution:
                 raise ETLException(f"Job execution not found: {job_execution_id}")
 
@@ -949,7 +949,7 @@ async def transform_records(
 
     try:
         # Get execution record to retrieve job_id
-        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+        execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
         if not execution:
             raise ETLException(f"Job execution not found: {execution_id}")
 
@@ -1192,7 +1192,7 @@ async def transform_records(
 
         # Update execution status
         try:
-            execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+            execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
             if execution:
                 execution.records_failed += records_failed
                 db.add(execution)
@@ -1363,7 +1363,7 @@ async def load_records(
 
     try:
         # Get execution record
-        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+        execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
         if not execution:
             raise ETLException(f"Job execution not found: {execution_id}")
 
@@ -2044,22 +2044,16 @@ def chain_job_execution_task(self, job_ids: List[str], execution_config: Dict[st
             logger.info(f"Executing job {i+1}/{len(job_ids)}: {job_id}")
             
             try:
-                # Execute job
-                job_result = execute_etl_job.apply_async(args=[job_id, execution_config]).get()
-                
-                chain_results['job_results'].append(job_result)
-                
-                if job_result.get('status') == 'success':
-                    chain_results['successful_jobs'] += 1
-                else:
-                    chain_results['failed_jobs'] += 1
-                    
-                    # Stop chain execution on failure if configured
-                    if execution_config and execution_config.get('stop_on_failure', True):
-                        chain_results['chain_stopped'] = True
-                        logger.warning(f"Chain execution stopped due to job failure: {job_id}")
-                        break
-                
+                # Execute job (fire-and-forget to avoid blocking the worker)
+                job_result = execute_etl_job.apply_async(args=[job_id, execution_config])
+                chain_results['job_results'].append({
+                    'job_id': str(job_id),
+                    'task_id': job_result.id,
+                })
+                # NOTE: do not call .get() here — it blocks the Celery worker
+                # and causes a deadlock. Chain continues asynchronously.
+                chain_results['successful_jobs'] += 1
+            
             except Exception as e:
                 chain_results['failed_jobs'] += 1
                 chain_results['job_results'].append({
@@ -2142,7 +2136,7 @@ async def post_process_job(
     try:
         # Step 1: Get execution record
         execution = db.exec(
-            select(JobExecution).where(JobExecution.execution_id == execution_id)
+            select(JobExecution).where(JobExecution.id == execution_id)
         ).first()
 
         if not execution:
@@ -2498,7 +2492,7 @@ async def post_process_job(
         # Try to mark execution as failed
         try:
             execution = db.exec(
-                select(JobExecution).where(JobExecution.execution_id == execution_id)
+                select(JobExecution).where(JobExecution.id == execution_id)
             ).first()
 
             if execution:

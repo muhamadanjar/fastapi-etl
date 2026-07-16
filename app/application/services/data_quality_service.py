@@ -467,7 +467,7 @@ class DataQualityService(BaseService):
             # Get job execution
             stmt = select(JobExecution).where(JobExecution.job_id == job_id)
             if execution_id:
-                stmt = stmt.where(JobExecution.execution_id == execution_id)
+                stmt = stmt.where(JobExecution.id == execution_id)
             else:
                 stmt = stmt.order_by(JobExecution.created_at.desc()).limit(1)
             
