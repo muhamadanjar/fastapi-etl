@@ -189,7 +189,7 @@ async def export_data_lineage(
     except ServiceError:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
 
-@router.get("/")
+@router.get("")
 async def list_reports(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
