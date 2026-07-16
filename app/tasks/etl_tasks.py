@@ -53,14 +53,19 @@ logger = get_logger(__name__)
 )
 def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[str, Any] = None):
     """
-    Process a single file through the ETL pipeline
-    
+    PATH A — File Upload pipeline (staging-only).
+    Processes an uploaded file: extract -> standardize -> store in `staging`
+    (StandardizedData). It does NOT run the full Transform/Load into
+    `processed` entities. Use the job-execution path (execute_etl_job)
+    with job_type='full_etl' for the complete Extract->Transform->Load flow.
+
     Args:
         file_id: ID of the file to process
+        user_id: ID of the uploading user
         processing_config: Optional processing configuration
-        
+
     Returns:
-        Processing results and statistics
+        Processing results and statistics (staging scope only)
     """
     task_id = self.request.id
     logger.info(f"Starting file processing task {task_id} for file {file_id}")
@@ -363,7 +368,16 @@ def run_transformation_pipeline(self, job_execution_id: str, transformation_conf
 )
 def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str = None, parameters: Dict = None):
     """
-    Execute complete ETL job
+    PATH B — Job Execution pipeline (full or partial).
+    Orchestrates the complete ETL flow based on `job.job_type`:
+      - 'extract'       -> _execute_extract_job    (raw -> staging)
+      - 'transform'     -> _execute_transform_job (staging -> transformation)
+      - 'load'          -> _execute_load_job       (transformation -> processed)
+      - 'full_etl'      -> _execute_full_etl_job   (extract -> transform -> load)
+
+    After the core phases, runs Phase 7 post-processing (triggers
+    dependent jobs). This is the COMPLETE pipeline — distinct from
+    PATH A (process_file_task) which only stages an uploaded file.
 
     Args:
         job_id: ID of the ETL job to execute
@@ -1204,10 +1218,11 @@ async def _execute_extract_job(db: Session, execution_id: str, config: Dict[str,
         results = []
 
         for file_id in file_ids:
-            # Process each file
-            file_result = process_file_task.apply_async(
-                args=[file_id, None, config]
-            ).get()
+            # Process each file.
+            # NOTE: do NOT call process_file_task.apply_async(...).get() from
+            # inside another Celery task — that blocks the worker and can
+            # deadlock. Invoke the task body directly via .run().
+            file_result = process_file_task.run(file_id, None, config)
             results.append(file_result)
         
         return {
@@ -1220,15 +1235,13 @@ async def _execute_extract_job(db: Session, execution_id: str, config: Dict[str,
     elif source_type == 'api':
         # API-based extraction
         from app.processors.api_processor import APIProcessor
-        
+
         api_processor = APIProcessor(db, execution_id, **config)
-        # API extraction logic would go here
-        
-        return {
-            'records_processed': 0,
-            'records_successful': 0,
-            'logs': ['API extraction completed']
-        }
+        # API extraction must be implemented per data source. Raising
+        # explicitly prevents silent no-op (returning 0 records).
+        raise NotImplementedError(
+            f"API extraction not implemented for source config: {config}"
+        )
     
     else:
         raise ETLException(f"Unknown source type: {source_type}")
