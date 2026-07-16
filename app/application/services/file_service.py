@@ -21,6 +21,7 @@ from app.infrastructure.db.repositories.upload_session_repository import UploadS
 from app.schemas.base import PaginatedMetaDataResponse
 from app.application.services.base import BaseService
 from app.application.services.user_service import UserService
+from app.core.enums import ValidationStatus
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
@@ -301,9 +302,9 @@ class FileService(BaseService):
                 ),
                 validation_result=FileValidationResult(
                     file_id=file_registry.id,
-                    validation_status='VALID',  # Assuming validation is done
-                    valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
-                    invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                    validation_status=ValidationStatus.VALID.value,  # Assuming validation is done
+                    valid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.VALID.value]),
+                    invalid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.INVALID.value]),
                     quality_score=1.0,  # Placeholder for quality score
                     warnings=0,
                     total_records=len(raw_records),
@@ -311,8 +312,8 @@ class FileService(BaseService):
                 
                 
                 # records_count=len(raw_records),
-                # valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
-                # invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                # valid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.VALID.value]),
+                # invalid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.INVALID.value]),
                 # columns=[{
                 #     "name": col.column_name,
                 #     "position": col.column_position,
@@ -537,7 +538,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "batch_upload")
     
-    async def process_file_content(self, file_id: int) -> Dict[str, Any]:
+    async def process_file_content(self, file_id: UUID) -> Dict[str, Any]:
         """Process file content dan extract data."""
         try:
             self.log_operation("process_file_content", {"file_id": file_id})
@@ -609,7 +610,7 @@ class FileService(BaseService):
         
         return processor_class(self.db)
     
-    async def _delete_related_data(self, file_id: int):
+    async def _delete_related_data(self, file_id: UUID):
         """Delete all related data for a file."""
         # Delete raw records
         raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)
