@@ -77,7 +77,7 @@ class LocalFileStorage:
         # regardless of the current working directory (e.g. when the Celery
         # worker runs from a different CWD, preventing orphaned files / missing
         # files on delete/download).
-        self.base_path = Path(base_path or settings.storage.local_storage_path).resolve()
+        self.base_path = Path(base_path or settings.storage_settings.local_storage_path).resolve()
         self.create_dirs = create_dirs
         self.allowed_extensions = allowed_extensions
         self.max_file_size = max_file_size

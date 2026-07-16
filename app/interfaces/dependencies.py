@@ -10,10 +10,14 @@ from app.infrastructure.db.manager import get_session_dependency, database_manag
 from app.infrastructure.cache import cache_manager
 from app.schemas.remote_user import RemoteUserInfo
 from app.infrastructure.db.models.auth import User
+from app.core.config import get_settings
+
+
 
 security = HTTPBearer()
 
 get_db = get_session_dependency
+settings = get_settings()
 
 
 async def _sync_user_to_db(user_info: RemoteUserInfo) -> None:

@@ -83,8 +83,8 @@ class S3FileStorage:
             storage_class: S3 storage class
             server_side_encryption: Server-side encryption method
         """
-        self.bucket_name = bucket_name or settings.storage.aws_s3_bucket
-        self.region = region or settings.storage.aws_s3_region
+        self.bucket_name = bucket_name or settings.storage_settings.aws_s3_bucket
+        self.region = region or settings.storage_settings.aws_s3_region
         self.prefix = prefix
         self.storage_class = storage_class
         self.server_side_encryption = server_side_encryption
@@ -105,10 +105,10 @@ class S3FileStorage:
                 'aws_access_key_id': access_key_id,
                 'aws_secret_access_key': secret_access_key,
             })
-        elif settings.storage.aws_s3_access_key_id and settings.storage.aws_s3_secret_access_key:
+        elif settings.storage_settings.aws_s3_access_key_id and settings.storage_settings.aws_s3_secret_access_key:
             session_kwargs.update({
-                'aws_access_key_id': settings.storage.aws_s3_access_key_id,
-                'aws_secret_access_key': settings.storage.aws_s3_secret_access_key,
+                'aws_access_key_id': settings.storage_settings.aws_s3_access_key_id,
+                'aws_secret_access_key': settings.storage_settings.aws_s3_secret_access_key,
             })
         
         try:

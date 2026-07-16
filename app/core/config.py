@@ -327,7 +327,6 @@ class Settings(BaseSettings):
         env_file=str(BASE_DIR / ".env"),
         extra="allow",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",
     )
 
 

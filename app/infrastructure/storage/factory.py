@@ -70,7 +70,7 @@ class StorageFactory:
         """
         # Use default storage type from settings if not provided
         if storage_type is None:
-            storage_type = StorageType(settings.storage.default_backend)
+            storage_type = StorageType(settings.storage_settings.default_backend)
         
         # Check if instance already exists
         cache_key = f"{storage_type}:{instance_name}"
@@ -113,7 +113,7 @@ class StorageFactory:
             StorageConfigurationError: If instance not found
         """
         # Try to find instance with default backend type
-        default_type = StorageType(settings.storage.default_backend)
+        default_type = StorageType(settings.storage_settings.default_backend)
         cache_key = f"{default_type}:{instance_name}"
         
         if cache_key in cls._instances:
@@ -143,7 +143,7 @@ class StorageFactory:
         
         if storage_type == StorageType.LOCAL:
             config.update({
-                "base_path": settings.storage.local_storage_path,
+                "base_path": settings.storage_settings.local_storage_path,
                 "create_dirs": True,
                 "allowed_extensions": getattr(settings.storage, "allowed_file_extensions", None),
                 "max_file_size": getattr(settings.storage, "max_file_size", None),
@@ -152,8 +152,8 @@ class StorageFactory:
         
         elif storage_type == StorageType.S3:
             config.update({
-                "bucket_name": settings.storage.aws_s3_bucket,
-                "region": settings.storage.aws_s3_region,
+                "bucket_name": settings.storage_settings.aws_s3_bucket,
+                "region": settings.storage_settings.aws_s3_region,
                 "access_key_id": getattr(settings.storage, "aws_s3_access_key_id", None),
                 "secret_access_key": getattr(settings.storage, "aws_s3_secret_access_key", None),
                 "endpoint_url": getattr(settings.storage, "aws_s3_endpoint_url", None),
