@@ -14,7 +14,7 @@ from app.infrastructure.db.models.etl_control.performance_metrics import Perform
 from app.interfaces.dependencies import get_current_user
 from app.core.response import APIResponse
 
-router = APIRouter(prefix="/metrics", tags=["Performance Metrics"])
+router = APIRouter(tags=["Performance Metrics"])
 
 
 @router.get("", response_model=APIResponse[List[PerformanceMetricRead]])
