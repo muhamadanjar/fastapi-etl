@@ -2,17 +2,21 @@
 
 Complete guide untuk menjalankan Celery worker dan background tasks.
 
+> **💡 Gunakan `python manage.py`** untuk command yang lebih mudah. Semua command celery bisa diakses via `python manage.py worker <subcommand>` dan `python manage.py task <subcommand>`. Lihat [CLI_GUIDE.md](./CLI_GUIDE.md) untuk panduan lengkap.
+
 ---
 
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [Worker Commands](#worker-commands)
-3. [Beat Scheduler](#beat-scheduler)
-4. [Monitoring](#monitoring)
-5. [Task Queues](#task-queues)
-6. [Production Deployment](#production-deployment)
-7. [Troubleshooting](#troubleshooting)
+2. [Worker Commands (manage.py)](#worker-commands-managepy)
+3. [Worker Commands (Raw Celery)](#worker-commands-raw-celery)
+4. [Beat Scheduler](#beat-scheduler)
+5. [Task Management (manage.py)](#task-management-managepy)
+6. [Monitoring](#monitoring)
+7. [Task Queues](#task-queues)
+8. [Production Deployment](#production-deployment)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -27,7 +31,21 @@ pip install -r requirements.txt
 redis-cli ping  # Should return: PONG
 ```
 
-### Run Worker
+### Using manage.py (Recommended)
+
+```bash
+# Start all workers
+python manage.py worker start
+
+# Start specific worker type
+python manage.py worker start --worker-type email
+
+# Start with beat
+python manage.py worker start
+python manage.py worker beat
+```
+
+### Using Raw Celery
 
 **Basic Worker**:
 ```bash
@@ -46,7 +64,70 @@ celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
 
 ---
 
-## Worker Commands
+## Worker Commands (manage.py)
+
+```bash
+# Start workers
+python manage.py worker start                         # All workers
+python manage.py worker start -t email                # Email worker only
+python manage.py worker start -t default -d           # Background
+python manage.py worker start --dry-run               # Preview
+
+# Stop workers
+python manage.py worker stop --all-workers
+python manage.py worker stop -n celery@default
+
+# Restart
+python manage.py worker restart -t email
+
+# Status
+python manage.py worker status
+python manage.py worker status --format json
+
+# Scale
+python manage.py worker scale -t default -c 8
+
+# Queues
+python manage.py worker queues
+python manage.py worker purge -q etl
+python manage.py worker purge -q default --force
+
+# Beat scheduler
+python manage.py worker beat
+python manage.py worker beat --detach
+
+# Generate configs
+python manage.py worker systemd -t default -o /etc/systemd/system/etl.service
+python manage.py worker docker-compose
+```
+
+---
+
+## Task Management (manage.py)
+
+```bash
+# List recent tasks
+python manage.py task list
+python manage.py task list --limit 50
+python manage.py task list --status FAILURE
+python manage.py task list --format json
+
+# Task detail
+python manage.py task show <task-id>
+python manage.py task show <task-id> --format json
+
+# Cancel task
+python manage.py task cancel <task-id>
+python manage.py task cancel <task-id> --force
+
+# Statistics
+python manage.py task stats
+python manage.py task stats --format json
+```
+
+---
+
+## Worker Commands (Raw Celery)
 
 ### Start Worker
 
@@ -90,7 +171,13 @@ celery -A app.tasks.celery_app worker -Q etl,cleanup
 
 Beat scheduler menjalankan periodic tasks (cron-like).
 
-### Run Beat
+### Using manage.py
+```bash
+python manage.py worker beat
+python manage.py worker beat --detach
+```
+
+### Raw Celery
 
 **With Worker**:
 ```bash
@@ -131,10 +218,30 @@ celery_app.conf.beat_schedule = {
 
 ## Monitoring
 
+### Using manage.py
+```bash
+# Flower dashboard
+python manage.py flower
+python manage.py flower --port 6666
+
+# Worker monitoring
+python manage.py worker status
+python manage.py worker queues
+
+# Task monitoring
+python manage.py task list
+python manage.py task stats
+```
+
 ### 1. Flower (Web UI)
 
 **Start Flower**:
 ```bash
+# Via manage.py
+python manage.py flower
+python manage.py worker flower --port 5555
+
+# Via raw celery
 celery -A app.tasks.celery_app flower --port=5555
 ```
 
@@ -592,40 +699,53 @@ def my_task():
 
 ## Summary
 
-**Development**:
+**Development (manage.py — Recommended)**:
 ```bash
-# Run worker
+python manage.py worker start           # Run all workers
+python manage.py worker beat            # Run beat
+python manage.py flower                 # Run flower
+python manage.py task list              # Monitor tasks
+```
+
+**Development (raw celery)**:
+```bash
 celery -A app.tasks.celery_app worker --loglevel=debug
-
-# Run with beat
 celery -A app.tasks.celery_app worker --beat --loglevel=debug
-
-# Run flower
 celery -A app.tasks.celery_app flower
 ```
 
 **Production**:
 ```bash
-# Use systemd or supervisor
-sudo systemctl start celery-worker celery-beat
+# Generate systemd config
+python manage.py worker systemd -t default
+python manage.py worker systemd -t email --output /etc/systemd/system/etl-email.service
 
-# Monitor with Flower
-celery -A app.tasks.celery_app flower --port=5555 --basic_auth=admin:password
+# Generate docker-compose
+python manage.py worker docker-compose
+
+# Monitoring
+python manage.py flower --port 5555
 ```
 
 **Monitoring**:
 - Flower UI: http://localhost:5555
-- CLI: `celery -A app.tasks.celery_app inspect`
+- CLI: `python manage.py worker status`, `python manage.py task list`
+- Raw CLI: `celery -A app.tasks.celery_app inspect`
 - Logs: `/var/log/celery/`
 
 **Structure**:
 ```
-app/
-├── tasks/
-│   ├── celery_app.py   # Celery configuration & entry point
-│   ├── etl_tasks.py    # ETL tasks
-│   ├── cleanup_tasks.py # Cleanup tasks
-│   └── monitoring_tasks.py # Monitoring tasks
+etl_api/
+├── manage.py              # CLI entry point
+├── commands/
+│   ├── worker.py          # Worker management (typer)
+│   └── task.py            # Task management (typer)
+├── app/
+│   └── tasks/
+│       ├── celery_app.py  # Celery configuration
+│       ├── etl_tasks.py   # ETL tasks
+│       ├── cleanup_tasks.py
+│       └── monitoring_tasks.py
 ```
 
 ---
@@ -633,6 +753,7 @@ app/
 ## Support
 
 For issues:
+- CLI: `python manage.py --help`, `python manage.py worker --help`, `python manage.py task --help`
 - Check logs: `celery -A app.tasks.celery_app worker --loglevel=debug`
-- Inspect workers: `celery -A app.tasks.celery_app inspect stats`
+- Inspect workers: `python manage.py worker status`
 - Monitor with Flower: http://localhost:5555

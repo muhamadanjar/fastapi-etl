@@ -1,6 +1,16 @@
 ```
 fastapi-clean-arch-starter/
 │
+├── manage.py                    # CLI entry point (Django-style)
+├── commands/                    # Custom management commands
+│   ├── __init__.py
+│   ├── base.py                  # BaseCommand (typer + rich)
+│   ├── clear_cache.py           # Cache management
+│   ├── migrate.py               # Database migrations
+│   ├── seed.py                  # Data seeding
+│   ├── worker.py                # Celery worker management
+│   └── task.py                  # Background task management
+│
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                  # Entry point aplikasi
@@ -52,14 +62,6 @@ fastapi-clean-arch-starter/
 │   │   │   └── sqs/
 │   │   │       ├── __init__.py
 │   │   │       └── ...
-│   │   │
-│   │   ├── cli/                 # Command line interface
-│   │   │   ├── __init__.py
-│   │   │   ├── commands/
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── migrate.py
-│   │   │   │   └── seed.py
-│   │   │   └── main.py
 │   │   │
 │   │   └── graphql/             # GraphQL API (optional)
 │   │       ├── __init__.py
@@ -243,51 +245,111 @@ create schema transformation;
 alembic upgrade head
 ```
 
-# Run
+## CLI Management Commands
+
+Gunakan `python manage.py` (Django-style) untuk semua operasi CLI.
+
 ```bash
-python -m app.main
+# Lihat semua command tersedia
+python manage.py --help
 ```
-### _OR_
+
+### Development Server
 ```bash
+# Start dev server
+python manage.py runserver
+
+# Custom host/port + auto-reload
+python manage.py runserver --host 0.0.0.0 --port 8080 --reload
+```
+
+### Interactive Shell
+```bash
+# IPython shell dengan app context (db, cache, models)
+python manage.py shell
+```
+
+### Database
+```bash
+# Run migrations
+python manage.py migrate
+python manage.py migrate --check       # Cek pending
+python manage.py migrate --fake        # Fake migrations
+
+# Seed data
+python manage.py seed                  # 10 records per model
+python manage.py seed --model users --count 100
+python manage.py seed --flush          # Hapus dulu baru seed
+```
+
+### Cache
+```bash
+python manage.py clear-cache --pattern "auth:*"
+python manage.py clear-cache --flush-all
+python manage.py clear-cache --pattern "*" --dry-run
+```
+
+### Celery Workers
+```bash
+# Start workers
+python manage.py worker start
+python manage.py worker start --worker-type email
+
+# Worker management
+python manage.py worker status
+python manage.py worker stop --all-workers
+python manage.py worker restart --worker-type default
+python manage.py worker scale -t default -c 4
+
+# Queues & scheduling
+python manage.py worker queues
+python manage.py worker purge -q default
+python manage.py worker beat
+```
+
+### Task Monitoring
+```bash
+python manage.py task list
+python manage.py task show <task-id>
+python manage.py task stats
+python manage.py task cancel <task-id>
+```
+
+### Monitoring Dashboard
+```bash
+# Flower UI
+python manage.py flower
+python manage.py flower --port 6666
+```
+
+### Generate Config Files
+```bash
+# Systemd service
+python manage.py worker systemd --worker-type default
+python manage.py worker systemd -t email --output /etc/systemd/system/etl-email.service
+
+# Docker Compose
+python manage.py worker docker-compose
+python manage.py worker docker-compose --output custom-workers.yml
+```
+
+### Command Langsung (untuk debugging)
+```bash
+# Run server
 python -m uvicorn app.main:app --reload
-```
 
-### Command Excuted
-```bash
-chmod +x start_worker.sh
-```
-
-
-### Enable Service
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable celery-worker@priority
-sudo systemctl enable celery-worker@background
-sudo systemctl start celery-worker@priority
-sudo systemctl start celery-worker@background
-```
-
-
-### Basic Run Celery
-```bash
 # Worker dasar
 celery -A app.tasks.celery_app worker --loglevel=info
+
 # Worker dengan queue spesifik
 celery -A app.tasks.celery_app worker -Q etl,monitoring,cleanup --loglevel=info
-celery -A app.tasks.celery_app worker --queues=default,etl,monitoring,cleanup --loglevel=info
-# Run worker dengan eventlet
-celery -A app.tasks.celery_app worker --pool=eventlet --queues=default,etl,monitoring,cleanup --concurrency=10 --loglevel=info
-# Worker dengan concurrency (jumlah proses)
-celery -A app.tasks.celery_app worker --concurrency=4 --loglevel=info
-# Worker dengan nama spesifik
-celery -A app.tasks.celery_app worker --hostname=worker1@%h --loglevel=info
 
 # Beat scheduler
 celery -A app.tasks.celery_app beat --loglevel=info
-# Beat dengan persistent scheduler
-celery -A app.tasks.celery_app beat --scheduler=celery.beat:PersistentScheduler --loglevel=info
-
 ```
+
+> **Note:** `python manage.py --help` untuk daftar lengkap.  
+> Panduan lengkap: [`docs/CLI_GUIDE.md`](./docs/CLI_GUIDE.md)
 
 
 Komponen Utama:

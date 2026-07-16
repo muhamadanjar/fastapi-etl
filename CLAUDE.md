@@ -483,3 +483,27 @@ Otomatis trigger setelah Phase 6 selesai. Trigger dependent jobs. Non-blocking �
 - **Database queries**: Enable SQLAlchemy echo in config
 - **Celery**: Use `--loglevel=debug` and monitor via Flower (http://localhost:5555)
 - **RabbitMQ**: Admin UI at http://localhost:15672 (credentials in docker-compose)
+
+## Rules
+
+### Git Operations — STRICTLY FORBIDDEN
+
+**NO git write operations allowed:**
+- ❌ `git commit` — FORBIDDEN
+- ❌ `git push` — FORBIDDEN
+- ❌ `git add` — FORBIDDEN
+- ❌ `git rm` — FORBIDDEN
+- ❌ `git merge` — FORBIDDEN
+- ❌ `git rebase` — FORBIDDEN
+- ❌ `git reset` — FORBIDDEN
+- ❌ `git checkout` — FORBIDDEN
+- ❌ `--force`, `--no-verify`, `--amend` flags — FORBIDDEN
+- ❌ Any submodule operations — FORBIDDEN
+
+**Only read-only operations allowed:**
+- ✅ `git log` — View commit history
+- ✅ `git status` — Check working tree status
+- ✅ `git diff` — View changes
+- ✅ `git show` — View commit details
+
+**Why:** Part of multi-service monorepo with git submodules. All git operations coordinated at root by authorized personnel.
