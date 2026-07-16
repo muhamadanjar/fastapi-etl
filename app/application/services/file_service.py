@@ -247,7 +247,7 @@ class FileService(BaseService):
                 return None
             
             # AUTHORIZATION: enforce ownership (prevent metadata IDOR).
-            if user_id and file_registry.created_by and file_registry.created_by != str(user_id):
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 return None
             
             # Get raw records count
@@ -326,7 +326,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_detail")
     
-    async def start_file_processing(self, file_id: str, user_id: str) -> str:
+    async def start_file_processing(self, file_id: UUID, user_id: UUID) -> str:
         """Start processing file secara asynchronous."""
         try:
             from app.tasks.etl_tasks import process_file_task
@@ -336,7 +336,7 @@ class FileService(BaseService):
             # Validate user exists from cache/remote (non-blocking, for audit/logging)
             if user_id:
                 try:
-                    user_exists = await UserService.validate_user_exists_remote(UUID(user_id))
+                    user_exists = await UserService.validate_user_exists_remote(UUID(str(user_id)))
                     if not user_exists:
                         self.logger.warning(f"User {user_id} not found in usermanagement API during file processing")
                 except Exception as e:
@@ -347,7 +347,7 @@ class FileService(BaseService):
                 raise FileError("File not found")
             
             # AUTHORIZATION: enforce ownership (prevent IDOR on processing).
-            if file_registry.created_by and file_registry.created_by != str(user_id):
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 raise FileError("You are not authorized to process this file")
             
             if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
@@ -383,7 +383,7 @@ class FileService(BaseService):
             
             # AUTHORIZATION: enforce ownership (prevent IDOR — users must only
             # act on their own files).
-            if file_registry.created_by and file_registry.created_by != str(user_id):
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 raise FileError("You are not authorized to delete this file")
             
             # Delete physical file
@@ -410,7 +410,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "delete_file")
     
-    async def download_file(self, file_id: UUID) -> FileResponse:
+    async def download_file(self, file_id: UUID, user_id: Optional[UUID] = None) -> FileResponse:
         """Download original file."""
         try:
             self.log_operation("download_file", {"file_id": file_id})
@@ -420,7 +420,7 @@ class FileService(BaseService):
                 raise FileError("File not found")
             
             # AUTHORIZATION: enforce ownership (prevent IDOR on file download).
-            if file_registry.created_by and file_registry.created_by != str(user_id):
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 raise FileError("You are not authorized to download this file")
             
             file_path = Path(file_registry.file_path)
@@ -441,7 +441,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "download_file")
     
-    async def preview_file_data(self, file_id: UUID, rows: int = 10) -> Dict[str, Any]:
+    async def preview_file_data(self, file_id: UUID, rows: int = 10, user_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Preview file data (first N rows)."""
         try:
             self.log_operation("preview_file_data", {"file_id": file_id, "rows": rows})
@@ -451,7 +451,7 @@ class FileService(BaseService):
                 raise FileError("File not found")
             
             # AUTHORIZATION: enforce ownership (prevent IDOR on data preview).
-            if file_registry.created_by and file_registry.created_by != str(user_id):
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 raise FileError("You are not authorized to preview this file")
             
             file_path = Path(file_registry.file_path)
