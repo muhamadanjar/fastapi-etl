@@ -394,7 +394,7 @@ def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str =
     with get_session() as db:
         try:
             # Get ETL job
-            job = db.exec(select(EtlJob).where(EtlJob.job_id == job_id)).first()
+            job = db.exec(select(EtlJob).where(EtlJob.id == job_id)).first()
             if not job:
                 raise ETLException(f"ETL job not found: {job_id}")
 
