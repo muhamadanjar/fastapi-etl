@@ -370,7 +370,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "start_file_processing")
     
-    async def delete_file(self, file_id: UUID, user_id: int) -> bool:
+    async def delete_file(self, file_id: UUID, user_id: UUID) -> bool:
         """Delete file dan semua data yang terkait."""
         try:
             self.log_operation("delete_file", {"file_id": file_id, "user_id": user_id})

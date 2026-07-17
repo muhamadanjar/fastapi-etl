@@ -63,7 +63,7 @@ class JobCreate(BaseModel):
 
 class JobRead(BaseModel):
     """Schema for reading ETL jobs."""
-    job_id: int
+    job_id: UUID
     job_name: str
     job_type: JobType
     job_category: JobCategory
@@ -104,7 +104,7 @@ class JobUpdate(BaseModel):
 
 class JobExecutionCreate(BaseModel):
     """Schema for creating job executions."""
-    job_id: int
+    job_id: UUID
     batch_id: Optional[str] = Field(default=None, max_length=50)
     execution_context: Optional[Dict[str, Any]] = Field(default=None, description="Execution context")
     scheduled_time: Optional[datetime] = None
@@ -113,8 +113,8 @@ class JobExecutionCreate(BaseModel):
 
 class JobExecutionRead(BaseModel):
     """Schema for reading job executions."""
-    execution_id: int
-    job_id: int
+    execution_id: UUID
+    job_id: UUID
     job_name: str
     batch_id: Optional[str] = None
     start_time: Optional[datetime] = None
@@ -145,7 +145,7 @@ class JobExecutionUpdate(BaseModel):
 
 class JobExecutionRequest(BaseModel):
     """Schema for job execution request."""
-    job_id: int
+    job_id: UUID
     batch_id: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
     force_run: bool = Field(default=False, description="Force run even if job is disabled")
@@ -154,15 +154,15 @@ class JobExecutionRequest(BaseModel):
 
 class JobExecutionResponse(BaseResponse):
     """Schema for job execution response."""
-    execution_id: int
-    job_id: int
+    execution_id: UUID
+    job_id: UUID
     status: JobStatus
     estimated_completion: Optional[datetime] = None
     
 
 class JobScheduleRequest(BaseModel):
     """Schema for job scheduling request."""
-    job_id: int
+    job_id: UUID
     schedule_expression: str = Field(description="Cron expression for scheduling")
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -171,7 +171,7 @@ class JobScheduleRequest(BaseModel):
 
 class JobStatistics(BaseModel):
     """Schema for job statistics."""
-    job_id: int
+    job_id: UUID
     job_name: str
     total_executions: int
     successful_executions: int
@@ -184,7 +184,7 @@ class JobStatistics(BaseModel):
 
 class JobPerformanceMetrics(BaseModel):
     """Schema for job performance metrics."""
-    execution_id: int
+    execution_id: UUID
     cpu_usage_percent: Optional[float] = None
     memory_usage_mb: Optional[float] = None
     disk_io_mb: Optional[float] = None
@@ -196,15 +196,15 @@ class JobPerformanceMetrics(BaseModel):
 
 class JobDependency(BaseModel):
     """Schema for job dependencies."""
-    parent_job_id: int
-    child_job_id: int
+    parent_job_id: UUID
+    child_job_id: UUID
     dependency_type: str = Field(description="Type of dependency: success, completion, failure")
     is_active: bool = True
 
 
 class JobBatchOperation(BaseModel):
     """Schema for batch job operations."""
-    job_ids: List[int]
+    job_ids: List[UUID]
     operation: str = Field(description="Operation: start, stop, pause, resume, delete")
     parameters: Optional[Dict[str, Any]] = None
     force: bool = Field(default=False, description="Force operation even if jobs are running")

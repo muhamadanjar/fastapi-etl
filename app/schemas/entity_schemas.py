@@ -40,7 +40,7 @@ class EntityCreate(BaseModel):
 
 class EntityRead(BaseModel):
     """Schema for reading entities."""
-    entity_id: int
+    entity_id: UUID
     entity_type: EntityType
     entity_key: str
     entity_data: Dict[str, Any]
@@ -70,8 +70,8 @@ class EntityUpdate(BaseModel):
 class EntityRelationshipResponse(BaseResponse):
     """Response schema for entity relationships."""
     relationship_id: UUID
-    entity_from: int
-    entity_to: int
+    entity_from: UUID
+    entity_to: UUID
     relationship_type: RelationshipType
     relationship_strength: float
     metadata: Optional[Dict[str, Any]] = None
@@ -82,8 +82,8 @@ class EntityRelationshipResponse(BaseResponse):
 
 class EntityRelationshipCreate(BaseModel):
     """Schema for creating entity relationships."""
-    entity_from: int = Field(description="Source entity ID")
-    entity_to: int = Field(description="Target entity ID")
+    entity_from: UUID = Field(description="Source entity ID")
+    entity_to: UUID = Field(description="Target entity ID")
     relationship_type: RelationshipType
     relationship_strength: Optional[float] = Field(default=1.0, ge=0, le=1, description="Strength of relationship")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional relationship metadata")
@@ -93,9 +93,9 @@ class EntityRelationshipCreate(BaseModel):
 
 class EntityRelationshipRead(BaseModel):
     """Schema for reading entity relationships."""
-    relationship_id: int
-    entity_from: int
-    entity_to: int
+    relationship_id: UUID
+    entity_from: UUID
+    entity_to: UUID
     relationship_type: RelationshipType
     relationship_strength: float
     metadata: Optional[Dict[str, Any]] = None
@@ -151,8 +151,8 @@ class EntitySearchRequest(BaseModel):
 
 class EntityMergeRequest(BaseModel):
     """Request schema for merging entities."""
-    target_entity_id: int = Field(description="ID of the entity to merge into")
-    source_entity_ids: List[int] = Field(
+    target_entity_id: UUID = Field(description="ID of the entity to merge into")
+    source_entity_ids: List[UUID] = Field(
         description="List of entity IDs to merge into the target entity",
         min_items=1,
         example=[1, 2, 3]

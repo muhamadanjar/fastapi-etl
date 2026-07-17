@@ -140,8 +140,8 @@ async def create_entity_relationship(
     """Create relationship between entities"""
     entity_service = EntityService(db)
     relationship_data = {
-        "entity_from": int(entity_id),
-        "entity_to": int(target_entity_id),
+        "entity_from": entity_id,
+        "entity_to": target_entity_id,
         "relationship_type": relationship_type,
         "relationship_strength": relationship_strength,
         "metadata": metadata

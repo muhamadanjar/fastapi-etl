@@ -15,6 +15,7 @@ from app.core.exceptions import NotificationError, ServiceError
 from app.core.enums import NotificationType, NotificationChannel, NotificationStatus
 from app.utils.date_utils import get_current_timestamp
 from app.core.config import get_settings
+from uuid import UUID
 
 settings = get_settings()
 
@@ -33,7 +34,7 @@ class NotificationService(BaseService):
     def get_service_name(self) -> str:
         return "NotificationService"
     
-    async def send_job_completion_notification(self, execution_id: int, recipients: List[str]) -> Dict[str, Any]:
+    async def send_job_completion_notification(self, execution_id: UUID, recipients: List[str]) -> Dict[str, Any]:
         """Send job completion notification."""
         try:
             self.log_operation("send_job_completion_notification", {
@@ -104,7 +105,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "send_job_completion_notification")
     
-    async def send_data_quality_alert(self, quality_check_id: int, recipients: List[str]) -> Dict[str, Any]:
+    async def send_data_quality_alert(self, quality_check_id: UUID, recipients: List[str]) -> Dict[str, Any]:
         """Send data quality alert notification."""
         try:
             self.log_operation("send_data_quality_alert", {
@@ -410,7 +411,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_notification_statistics")
     
-    async def setup_notification_preferences(self, user_id: int, preferences: Dict[str, Any]) -> Dict[str, Any]:
+    async def setup_notification_preferences(self, user_id: UUID, preferences: Dict[str, Any]) -> Dict[str, Any]:
         """Setup user notification preferences."""
         try:
             self.log_operation("setup_notification_preferences", {"user_id": user_id})
@@ -708,7 +709,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "schedule_notification")
     
-    async def cancel_scheduled_notification(self, scheduled_notification_id: int) -> bool:
+    async def cancel_scheduled_notification(self, scheduled_notification_id: UUID) -> bool:
         """Cancel a scheduled notification."""
         try:
             self.log_operation("cancel_scheduled_notification", {
@@ -830,7 +831,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_notification_templates")
     
-    async def send_notification_with_template(self, template_id: int, recipients: List[str], 
+    async def send_notification_with_template(self, template_id: UUID, recipients: List[str], 
                                             variables: Dict[str, Any]) -> Dict[str, Any]:
         """Send notification using a custom template."""
         try:
@@ -886,7 +887,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "send_notification_with_template")
     
-    async def get_notification_delivery_status(self, notification_id: int) -> Dict[str, Any]:
+    async def get_notification_delivery_status(self, notification_id: UUID) -> Dict[str, Any]:
         """Get delivery status of a notification."""
         try:
             self.log_operation("get_notification_delivery_status", {"notification_id": notification_id})
@@ -936,7 +937,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "setup_notification_escalation")
     
-    async def trigger_escalation(self, escalation_id: int, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def trigger_escalation(self, escalation_id: UUID, context: Dict[str, Any]) -> Dict[str, Any]:
         """Trigger notification escalation."""
         try:
             self.log_operation("trigger_escalation", {"escalation_id": escalation_id})
@@ -975,7 +976,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "trigger_escalation")
     
-    async def send_notification_digest(self, user_id: int, digest_type: str = "daily") -> Dict[str, Any]:
+    async def send_notification_digest(self, user_id: UUID, digest_type: str = "daily") -> Dict[str, Any]:
         """Send notification digest (daily/weekly summary)."""
         try:
             self.log_operation("send_notification_digest", {"user_id": user_id, "digest_type": digest_type})
@@ -1016,7 +1017,7 @@ class NotificationService(BaseService):
         except Exception as e:
             self.handle_error(e, "send_notification_digest")
     
-    async def manage_notification_subscriptions(self, user_id: int, subscriptions: Dict[str, Any]) -> Dict[str, Any]:
+    async def manage_notification_subscriptions(self, user_id: UUID, subscriptions: Dict[str, Any]) -> Dict[str, Any]:
         """Manage user notification subscriptions."""
         try:
             self.log_operation("manage_notification_subscriptions", {"user_id": user_id})
@@ -1409,14 +1410,14 @@ class NotificationService(BaseService):
             return template_content
     
     # Database helper methods (implement based on your models)
-    async def _get_execution_details(self, execution_id: int):
+    async def _get_execution_details(self, execution_id: UUID):
         """Get execution details from database."""
         # Implement database query
 
 
         pass
     
-    async def _get_quality_check_details(self, quality_check_id: int):
+    async def _get_quality_check_details(self, quality_check_id: UUID):
         """Get quality check details from database."""
         # Implement database query
         pass
@@ -1436,7 +1437,7 @@ class NotificationService(BaseService):
         # Implement database query
         pass
     
-    async def _save_notification_preferences(self, user_id: int, preferences: Dict[str, Any]):
+    async def _save_notification_preferences(self, user_id: UUID, preferences: Dict[str, Any]):
         """Save user notification preferences."""
         # Implement database insert/update
         pass
@@ -1446,7 +1447,7 @@ class NotificationService(BaseService):
         # Implement database insert
         pass
     
-    async def _cancel_scheduled_notification(self, scheduled_notification_id: int):
+    async def _cancel_scheduled_notification(self, scheduled_notification_id: UUID):
         """Cancel scheduled notification in database."""
         # Implement database update
         pass
@@ -1456,7 +1457,7 @@ class NotificationService(BaseService):
         # Implement database query
         pass
     
-    async def _update_scheduled_notification_status(self, notification_id: int, status: str, 
+    async def _update_scheduled_notification_status(self, notification_id: UUID, status: str, 
                                                    processed_at: datetime, error_message: str = None):
         """Update scheduled notification status."""
         # Implement database update
@@ -1472,17 +1473,17 @@ class NotificationService(BaseService):
         # Implement database query
         pass
     
-    async def _get_notification_template_by_id(self, template_id: int):
+    async def _get_notification_template_by_id(self, template_id: UUID):
         """Get notification template by ID."""
         # Implement database query
         pass
     
-    async def _get_template_usage_count(self, template_id: int):
+    async def _get_template_usage_count(self, template_id: UUID):
         """Get template usage count."""
         # Implement database query
         pass
     
-    async def _get_notification_by_id(self, notification_id: int):
+    async def _get_notification_by_id(self, notification_id: UUID):
         """Get notification by ID."""
         # Implement database query
         pass
@@ -1497,7 +1498,7 @@ class NotificationService(BaseService):
         # Implement database insert
         pass
     
-    async def _get_notification_escalation_by_id(self, escalation_id: int):
+    async def _get_notification_escalation_by_id(self, escalation_id: UUID):
         """Get notification escalation by ID."""
         # Implement database query
         pass
@@ -1507,22 +1508,22 @@ class NotificationService(BaseService):
         # Implement escalation level processing
         pass
     
-    async def _get_user_notification_preferences(self, user_id: int):
+    async def _get_user_notification_preferences(self, user_id: UUID):
         """Get user notification preferences."""
         # Implement database query
         pass
     
-    async def _get_daily_digest_data(self, user_id: int):
+    async def _get_daily_digest_data(self, user_id: UUID):
         """Get daily digest data for user."""
         # Implement data aggregation for daily digest
         pass
     
-    async def _get_weekly_digest_data(self, user_id: int):
+    async def _get_weekly_digest_data(self, user_id: UUID):
         """Get weekly digest data for user."""
         # Implement data aggregation for weekly digest
         pass
     
-    async def _save_notification_subscriptions(self, user_id: int, subscriptions: Dict[str, Any]):
+    async def _save_notification_subscriptions(self, user_id: UUID, subscriptions: Dict[str, Any]):
         """Save notification subscriptions."""
         # Implement database insert/update
         pass

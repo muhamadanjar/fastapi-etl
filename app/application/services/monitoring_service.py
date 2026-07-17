@@ -10,6 +10,7 @@ from app.application.services.base import BaseService
 from app.core.exceptions import MonitoringError, ServiceError
 from app.core.enums import JobStatus
 from app.utils.date_utils import get_current_timestamp
+from uuid import UUID
 
 
 class MonitoringService(BaseService):
@@ -55,7 +56,7 @@ class MonitoringService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_system_overview")
     
-    async def get_job_performance_metrics(self, job_id: int = None, days: int = 7) -> Dict[str, Any]:
+    async def get_job_performance_metrics(self, job_id: UUID = None, days: int = 7) -> Dict[str, Any]:
         """Get job performance metrics for specified period."""
         try:
             self.log_operation("get_job_performance_metrics", {"job_id": job_id, "days": days})
@@ -110,7 +111,7 @@ class MonitoringService(BaseService):
                 },
                 "daily_trend": daily_trend,
                 "recent_executions": [{
-                    "execution_id": e.execution_id,
+                    "execution_id": e.id,
                     "status": e.status,
                     "start_time": e.start_time,
                     "duration_seconds": round((e.end_time - e.start_time).total_seconds(), 2) if e.start_time and e.end_time else None,
@@ -303,7 +304,7 @@ class MonitoringService(BaseService):
         except Exception as e:
             self.handle_error(e, "create_alert")
     
-    async def resolve_alert(self, alert_id: int, resolution_note: str = None) -> bool:
+    async def resolve_alert(self, alert_id: UUID, resolution_note: str = None) -> bool:
         """Resolve a system alert."""
         try:
             self.log_operation("resolve_alert", {"alert_id": alert_id})
@@ -373,9 +374,9 @@ class MonitoringService(BaseService):
                     "jobs": [{
                         "job_id": job.job_id,
                         "job_name": job.job_name,
-                        "execution_id": job.execution_id,
+                        "execution_id": job.id,
                         "start_time": job.start_time,
-                        "progress": await self._estimate_job_progress(job.execution_id)
+                        "progress": await self._estimate_job_progress(job.id)
                     } for job in running_jobs]
                 },
                 "recent_activity": recent_activity,
@@ -521,7 +522,7 @@ class MonitoringService(BaseService):
         try:
             period_map = {"1d": 1, "7d": 7, "30d": 30}
             days = period_map.get(period, 7)
-            return await self.get_job_performance_metrics(job_id=int(job_id) if job_id else None, days=days)
+            return await self.get_job_performance_metrics(job_id=UUID(job_id) if job_id else None, days=days)
         except Exception as e:
             self.handle_error(e, "get_job_performance")
 
@@ -635,7 +636,7 @@ class MonitoringService(BaseService):
         
         return list(reversed(trend_data))  # Most recent first
     
-    async def _estimate_job_progress(self, execution_id: int) -> Optional[float]:
+    async def _estimate_job_progress(self, execution_id: UUID) -> Optional[float]:
         """Estimate job progress percentage."""
         # Implement progress estimation logic based on records processed vs expected
         # This is a simplified version
@@ -712,7 +713,7 @@ class MonitoringService(BaseService):
         """Get active system alerts."""
         return []
 
-    async def _get_executions_for_period(self, job_id: int, days: int) -> List:
+    async def _get_executions_for_period(self, job_id: UUID, days: int) -> List:
         """Get executions for specified period."""
         return []
 
@@ -728,11 +729,11 @@ class MonitoringService(BaseService):
         """Create alert record in database."""
         return {"id": 0, "status": "created"}
 
-    async def _get_alert_by_id(self, alert_id: int) -> Optional[Dict[str, Any]]:
+    async def _get_alert_by_id(self, alert_id: UUID) -> Optional[Dict[str, Any]]:
         """Get alert by ID."""
         return None
 
-    async def _update_alert_status(self, alert_id: int, is_resolved: bool, resolved_at: datetime, resolution_note: str) -> bool:
+    async def _update_alert_status(self, alert_id: UUID, is_resolved: bool, resolved_at: datetime, resolution_note: str) -> bool:
         """Update alert status."""
         return True
 

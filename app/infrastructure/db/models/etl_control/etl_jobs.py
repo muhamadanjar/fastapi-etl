@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+from uuid import UUID
 from sqlmodel import SQLModel, Field, Column, Relationship, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from enum import Enum
@@ -165,7 +166,7 @@ class EtlJobValidation(SQLModel):
 class EtlJobDependency(SQLModel):
     """Schema untuk dependency ETL job"""
     job_id: str
-    depends_on_job_id: int
+    depends_on_job_id: UUID
     dependency_type: str  # 'success', 'completion', 'data_availability'
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -186,7 +187,7 @@ class EtlJobTemplate(SQLModel):
 
 class EtlJobClone(SQLModel):
     """Schema untuk clone ETL job"""
-    source_job_id: int
+    source_job_id: UUID
     new_job_name: str = Field(max_length=100)
     copy_executions: bool = Field(default=False)
     copy_schedule: bool = Field(default=True)
@@ -195,3 +196,4 @@ class EtlJobClone(SQLModel):
 
 # Import untuk menghindari circular imports
 from .job_executions import JobExecutionRead
+from uuid import UUID

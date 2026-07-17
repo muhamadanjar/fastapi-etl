@@ -458,7 +458,7 @@ class JobOrchestrationService(BaseService):
             self.db.commit()
             self.db.refresh(execution)
 
-            execution_id = execution.execution_id
+            execution_id = execution.id
 
             self.logger.debug(
                 f"[ORCHESTRATION] JobExecution created: {execution_id} "

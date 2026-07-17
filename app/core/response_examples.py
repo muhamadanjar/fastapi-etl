@@ -12,6 +12,7 @@ Standardized response format for all endpoints:
 
 Metas can contain: page, page_size, total, total_pages, time_elapsed, etc
 """
+from uuid import UUID
 
 from app.core.response import APIResponse, ResponseBuilder
 
@@ -129,7 +130,7 @@ from typing import List, Optional
 router = APIRouter(prefix="/api/v1", tags=["users"])
 
 @router.get("/users/{user_id}")
-async def get_user(user_id: int):
+async def get_user(user_id: UUID):
     """Get single user"""
     user = {"id": user_id, "name": "John Doe", "email": "john@example.com"}
     return APIResponse.success(
@@ -161,7 +162,7 @@ async def create_user(name: str, email: str):
         .build()
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: int):
+async def delete_user(user_id: UUID):
     """Delete user"""
     return ResponseBuilder()\
         .with_message("User deleted successfully")\

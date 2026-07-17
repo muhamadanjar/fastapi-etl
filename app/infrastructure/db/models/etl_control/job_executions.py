@@ -139,7 +139,7 @@ class JobExecutionUpdate(SQLModel):
 
 class JobExecutionRead(JobExecutionBase):
     """Schema untuk read job execution"""
-    execution_id: int
+    execution_id: UUID
     created_at: datetime
 
 
@@ -155,7 +155,7 @@ class JobExecutionReadWithQualityResults(JobExecutionRead):
 
 class JobExecutionFilter(SQLModel):
     """Schema untuk filter job execution"""
-    job_id: Optional[int] = Field(default=None)
+    job_id: Optional[UUID] = Field(default=None)
     batch_id: Optional[str] = Field(default=None)
     status: Optional[ExecutionStatus] = Field(default=None)
     start_time_from: Optional[datetime] = Field(default=None)
@@ -170,7 +170,7 @@ class JobExecutionFilter(SQLModel):
 
 class JobExecutionSummary(SQLModel):
     """Schema untuk summary job execution"""
-    job_id: int
+    job_id: UUID
     job_name: str
     total_executions: int
     successful_executions: int
@@ -184,7 +184,7 @@ class JobExecutionSummary(SQLModel):
 
 class JobExecutionMetrics(SQLModel):
     """Schema untuk metrics job execution"""
-    execution_id: int
+    execution_id: UUID
     duration_seconds: Optional[float] = Field(default=None)
     records_per_second: Optional[float] = Field(default=None)
     success_rate: Optional[float] = Field(default=None)
@@ -197,7 +197,7 @@ class JobExecutionMetrics(SQLModel):
 
 class JobExecutionLog(SQLModel):
     """Schema untuk log job execution"""
-    execution_id: int
+    execution_id: UUID
     log_level: str  # 'INFO', 'WARNING', 'ERROR', 'DEBUG'
     log_message: str
     log_timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -206,7 +206,7 @@ class JobExecutionLog(SQLModel):
 
 class JobExecutionRestart(SQLModel):
     """Schema untuk restart job execution"""
-    execution_id: int
+    execution_id: UUID
     restart_from_step: Optional[str] = Field(default=None)
     restart_reason: str
     preserve_batch_id: bool = Field(default=True)
@@ -215,7 +215,7 @@ class JobExecutionRestart(SQLModel):
 
 class JobExecutionCancel(SQLModel):
     """Schema untuk cancel job execution"""
-    execution_id: int
+    execution_id: UUID
     cancel_reason: str
     force_cancel: bool = Field(default=False)
     cleanup_resources: bool = Field(default=True)
@@ -223,7 +223,7 @@ class JobExecutionCancel(SQLModel):
 
 class JobExecutionRetry(SQLModel):
     """Schema untuk retry job execution"""
-    execution_id: int
+    execution_id: UUID
     retry_count: int = Field(default=1)
     retry_delay_minutes: int = Field(default=5)
     retry_reason: str
@@ -232,7 +232,7 @@ class JobExecutionRetry(SQLModel):
 
 class JobExecutionAlert(SQLModel):
     """Schema untuk alert job execution"""
-    execution_id: int
+    execution_id: UUID
     alert_type: str  # 'failure', 'timeout', 'performance', 'data_quality'
     alert_severity: str  # 'low', 'medium', 'high', 'critical'
     alert_message: str

@@ -15,6 +15,7 @@ from app.schemas.auth import UserCreate, Token, PasswordChange
 from app.core.exceptions import ServiceError, UnauthorizedError
 from app.core.constants import JWT_SECRET_KEY, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE
 from app.utils.security import create_access_token, create_refresh_token
+from uuid import UUID
 
 
 class AuthService(BaseService):
@@ -181,7 +182,7 @@ class AuthService(BaseService):
             self.db.rollback()
             self.handle_error(e, "logout_user")
     
-    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
         """Get user by ID."""
         try:
             self.log_operation("get_user_by_id", {"user_id": user_id})
@@ -282,7 +283,7 @@ class AuthService(BaseService):
             self.db.rollback()
             self.handle_error(e, "reset_password_confirm")
     
-    async def deactivate_user(self, user_id: int) -> bool:
+    async def deactivate_user(self, user_id: UUID) -> bool:
         """Deactivate user account."""
         try:
             self.log_operation("deactivate_user", {"user_id": user_id})
@@ -302,7 +303,7 @@ class AuthService(BaseService):
             self.db.rollback()
             self.handle_error(e, "deactivate_user")
     
-    async def activate_user(self, user_id: int) -> bool:
+    async def activate_user(self, user_id: UUID) -> bool:
         """Activate user account."""
         try:
             self.log_operation("activate_user", {"user_id": user_id})

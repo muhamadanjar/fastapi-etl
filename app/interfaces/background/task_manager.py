@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
 from app.interfaces.background.task_service import TaskService
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ class TaskManager:
     
     def queue_welcome_email(
         self,
-        user_id: int,
+        user_id: UUID,
         user_email: str,
         user_name: str
     ) -> TaskInfo:

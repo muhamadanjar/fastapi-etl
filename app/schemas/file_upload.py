@@ -101,7 +101,7 @@ class FilePreview(BaseModel):
 
 class BatchProcessingRequest(BaseModel):
     """Schema for batch processing request."""
-    file_ids: List[int]
+    file_ids: List[UUID]
     processing_options: Optional[Dict[str, Any]] = None
     priority: int = Field(default=1, ge=1, le=5, description="Processing priority")
     schedule_time: Optional[datetime] = Field(default=None, description="Schedule processing for later")
@@ -118,7 +118,7 @@ class BatchProcessingResponse(BaseResponse):
 
 class FileDownloadRequest(BaseModel):
     """Schema for file download request."""
-    file_id: int
+    file_id: UUID
     format: Optional[str] = Field(default="original", description="Download format")
     include_metadata: bool = Field(default=False, description="Include metadata in download")
 
@@ -137,7 +137,7 @@ class FileValidationResult(BaseModel):
 
 class FileExportRequest(BaseModel):
     """Schema for file export request."""
-    file_ids: List[int]
+    file_ids: List[UUID]
     export_format: str = Field(description="Export format: csv, excel, json")
     include_raw_data: bool = Field(default=True)
     include_processed_data: bool = Field(default=False)
