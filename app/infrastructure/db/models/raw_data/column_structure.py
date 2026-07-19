@@ -222,7 +222,7 @@ class ColumnStructureBulkCreate(SQLModel):
 
 class ColumnStructureAnalysis(SQLModel):
     """Schema for column structure analysis results"""
-    file_id: int
+    file_id: UUID
     total_columns: int
     analyzed_columns: int
     data_quality_score: float

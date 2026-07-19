@@ -266,6 +266,11 @@ class SecuritySettings(BaseSettings):
     access_token_expire: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE")  # minutes
     refresh_token_expire: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE")  # days
     usermanagement_api_url: str = Field(default="http://localhost:8000", env="USERMANAGEMENT_API_URL")
+    # Comma-separated list of role NAMES that are allowed to perform
+    # admin/privileged actions. Roles are managed dynamically in
+    # fastapi_usermanagement, so this MUST stay configurable (env) rather than
+    # hardcoded in code.
+    admin_roles: str = Field(default="admin,superuser", env="ADMIN_ROLES")
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),
@@ -322,7 +327,6 @@ class Settings(BaseSettings):
         env_file=str(BASE_DIR / ".env"),
         extra="allow",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",
     )
 
 

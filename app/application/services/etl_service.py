@@ -483,7 +483,7 @@ class ETLService(BaseService):
             self.db.rollback()
             self.handle_error(e, "unschedule_job")
 
-    async def get_job_status(self, job_id: int) -> Dict[str, Any]:
+    async def get_job_status(self, job_id: UUID) -> Dict[str, Any]:
         """Get job status dan recent executions."""
         try:
             self.log_operation("get_job_status", {"job_id": job_id})
@@ -523,7 +523,7 @@ class ETLService(BaseService):
                 "job_category": job.job_category,
                 "is_active": job.is_active,
                 "latest_execution": {
-                    "execution_id": latest_execution.execution_id,
+                    "execution_id": latest_execution.id,
                     "status": latest_execution.status,
                     "start_time": latest_execution.start_time.isoformat() if latest_execution.start_time else None,
                     "end_time": latest_execution.end_time.isoformat() if latest_execution.end_time else None,
@@ -545,7 +545,7 @@ class ETLService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_job_status")
     
-    async def get_execution_details(self, execution_id: int) -> Dict[str, Any]:
+    async def get_execution_details(self, execution_id: UUID) -> Dict[str, Any]:
         """Get detailed execution information."""
         try:
             self.log_operation("get_execution_details", {"execution_id": execution_id})
@@ -557,7 +557,7 @@ class ETLService(BaseService):
             job = self.db.get(EtlJob, execution.job_id)
             
             return {
-                "execution_id": execution.execution_id,
+                "execution_id": execution.id,
                 "job_id": execution.job_id,
                 "job_name": job.job_name if job else None,
                 "batch_id": execution.batch_id,
@@ -576,7 +576,7 @@ class ETLService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_execution_details")
     
-    async def cancel_execution(self, execution_id: int) -> bool:
+    async def cancel_execution(self, execution_id: UUID) -> bool:
         """Cancel a running execution."""
         try:
             self.log_operation("cancel_execution", {"execution_id": execution_id})
@@ -693,7 +693,7 @@ class ETLService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_jobs_list")
     
-    async def update_job(self, job_id: int, job_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_job(self, job_id: UUID, job_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing ETL job."""
         try:
             self.log_operation("update_job", {"job_id": job_id})
@@ -716,7 +716,7 @@ class ETLService(BaseService):
             self.db.rollback()
             self.handle_error(e, "update_job")
     
-    async def delete_job(self, job_id: int) -> bool:
+    async def delete_job(self, job_id: UUID) -> bool:
         """Delete an ETL job."""
         try:
             self.log_operation("delete_job", {"job_id": job_id})

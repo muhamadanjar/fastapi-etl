@@ -279,7 +279,7 @@ class TransformationService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_field_mappings")
     
-    async def update_transformation_rule(self, rule_id: str, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_transformation_rule(self, rule_id: UUID, rule_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing transformation rule."""
         try:
             self.log_operation("update_transformation_rule", {"rule_id": rule_id})
@@ -314,7 +314,7 @@ class TransformationService(BaseService):
             self.db.rollback()
             self.handle_error(e, "update_transformation_rule")
     
-    async def delete_transformation_rule(self, rule_id: str) -> bool:
+    async def delete_transformation_rule(self, rule_id: UUID) -> bool:
         """Delete a transformation rule."""
         try:
             self.log_operation("delete_transformation_rule", {"rule_id": rule_id})
@@ -332,7 +332,7 @@ class TransformationService(BaseService):
             self.db.rollback()
             self.handle_error(e, "delete_transformation_rule")
 
-    async def update_field_mapping(self, mapping_id: str, mapping_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_field_mapping(self, mapping_id: UUID, mapping_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing field mapping."""
         try:
             self.log_operation("update_field_mapping", {"mapping_id": mapping_id})
@@ -362,7 +362,7 @@ class TransformationService(BaseService):
             self.db.rollback()
             self.handle_error(e, "update_field_mapping")
 
-    async def delete_field_mapping(self, mapping_id: str) -> bool:
+    async def delete_field_mapping(self, mapping_id: UUID) -> bool:
         """Delete a field mapping."""
         try:
             self.log_operation("delete_field_mapping", {"mapping_id": mapping_id})

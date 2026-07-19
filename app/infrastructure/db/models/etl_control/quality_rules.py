@@ -103,7 +103,7 @@ class QualityRuleSummary(SQLModel):
 
 class QualityRuleValidation(SQLModel):
     """Schema untuk validasi quality rule"""
-    rule_id: int
+    rule_id: UUID
     validation_type: str  # 'syntax', 'logic', 'performance'
     is_valid: bool
     validation_errors: Optional[List[str]] = Field(default=None)
@@ -133,14 +133,14 @@ class QualityRuleBulkCreate(SQLModel):
 
 class QualityRuleBulkUpdate(SQLModel):
     """Schema untuk bulk update quality rule"""
-    rule_ids: List[int]
+    rule_ids: List[UUID]
     updates: QualityRuleUpdate
     apply_to_matching: Optional[Dict[str, Any]] = Field(default=None)  # filter criteria
 
 
 class QualityRuleTest(SQLModel):
     """Schema untuk test quality rule"""
-    rule_id: int
+    rule_id: UUID
     test_data: Dict[str, Any]
     expected_result: bool
     test_description: Optional[str] = Field(default=None)
@@ -148,7 +148,7 @@ class QualityRuleTest(SQLModel):
 
 class QualityRuleTestResult(SQLModel):
     """Schema untuk hasil test quality rule"""
-    rule_id: int
+    rule_id: UUID
     test_passed: bool
     actual_result: bool
     expected_result: bool
@@ -160,7 +160,7 @@ class QualityRuleTestResult(SQLModel):
 
 class QualityRulePerformance(SQLModel):
     """Schema untuk performance quality rule"""
-    rule_id: int
+    rule_id: UUID
     avg_execution_time_ms: float
     max_execution_time_ms: float
     min_execution_time_ms: float
@@ -171,7 +171,7 @@ class QualityRulePerformance(SQLModel):
 
 class QualityRuleUsage(SQLModel):
     """Schema untuk usage quality rule"""
-    rule_id: int
+    rule_id: UUID
     rule_name: str
     usage_count: int
     last_used: Optional[datetime] = Field(default=None)
@@ -182,7 +182,7 @@ class QualityRuleUsage(SQLModel):
 
 class QualityRuleClone(SQLModel):
     """Schema untuk clone quality rule"""
-    source_rule_id: int
+    source_rule_id: UUID
     new_rule_name: str = Field(max_length=100)
     modify_expression: Optional[str] = Field(default=None)
     modify_threshold: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)

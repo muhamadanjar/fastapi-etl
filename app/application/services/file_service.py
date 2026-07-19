@@ -21,6 +21,7 @@ from app.infrastructure.db.repositories.upload_session_repository import UploadS
 from app.schemas.base import PaginatedMetaDataResponse
 from app.application.services.base import BaseService
 from app.application.services.user_service import UserService
+from app.core.enums import ValidationStatus
 from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
 from app.infrastructure.db.models.raw_data.raw_records import RawRecords
 from app.infrastructure.db.models.raw_data.column_structure import ColumnStructure
@@ -237,13 +238,17 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_list")
     
-    async def get_file_detail(self, file_id: UUID) -> Optional[FileDetailResponse]:
+    async def get_file_detail(self, file_id: UUID, user_id: Optional[UUID] = None) -> Optional[FileDetailResponse]:
         """Get detailed information tentang file."""
         try:
             self.log_operation("get_file_detail", {"file_id": file_id})
             
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
+                return None
+            
+            # AUTHORIZATION: enforce ownership (prevent metadata IDOR).
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
                 return None
             
             # Get raw records count
@@ -297,9 +302,9 @@ class FileService(BaseService):
                 ),
                 validation_result=FileValidationResult(
                     file_id=file_registry.id,
-                    validation_status='VALID',  # Assuming validation is done
-                    valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
-                    invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                    validation_status=ValidationStatus.VALID.value,  # Assuming validation is done
+                    valid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.VALID.value]),
+                    invalid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.INVALID.value]),
                     quality_score=1.0,  # Placeholder for quality score
                     warnings=0,
                     total_records=len(raw_records),
@@ -307,8 +312,8 @@ class FileService(BaseService):
                 
                 
                 # records_count=len(raw_records),
-                # valid_records=len([r for r in raw_records if r.validation_status == 'VALID']),
-                # invalid_records=len([r for r in raw_records if r.validation_status == 'INVALID']),
+                # valid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.VALID.value]),
+                # invalid_records=len([r for r in raw_records if r.validation_status == ValidationStatus.INVALID.value]),
                 # columns=[{
                 #     "name": col.column_name,
                 #     "position": col.column_position,
@@ -322,7 +327,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_file_detail")
     
-    async def start_file_processing(self, file_id: str, user_id: str) -> str:
+    async def start_file_processing(self, file_id: UUID, user_id: UUID) -> str:
         """Start processing file secara asynchronous."""
         try:
             from app.tasks.etl_tasks import process_file_task
@@ -332,7 +337,7 @@ class FileService(BaseService):
             # Validate user exists from cache/remote (non-blocking, for audit/logging)
             if user_id:
                 try:
-                    user_exists = await UserService.validate_user_exists_remote(UUID(user_id))
+                    user_exists = await UserService.validate_user_exists_remote(UUID(str(user_id)))
                     if not user_exists:
                         self.logger.warning(f"User {user_id} not found in usermanagement API during file processing")
                 except Exception as e:
@@ -341,6 +346,10 @@ class FileService(BaseService):
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR on processing).
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
+                raise FileError("You are not authorized to process this file")
             
             if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
                 raise FileError("File is already being processed")
@@ -361,7 +370,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "start_file_processing")
     
-    async def delete_file(self, file_id: UUID, user_id: int) -> bool:
+    async def delete_file(self, file_id: UUID, user_id: UUID) -> bool:
         """Delete file dan semua data yang terkait."""
         try:
             self.log_operation("delete_file", {"file_id": file_id, "user_id": user_id})
@@ -372,6 +381,11 @@ class FileService(BaseService):
             
             if file_registry.processing_status == ProcessingStatus.PROCESSING.value:
                 raise FileError("Cannot delete file while processing")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR — users must only
+            # act on their own files).
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
+                raise FileError("You are not authorized to delete this file")
             
             # Delete physical file
             file_path = Path(file_registry.file_path)
@@ -397,7 +411,7 @@ class FileService(BaseService):
             self.db.rollback()
             self.handle_error(e, "delete_file")
     
-    async def download_file(self, file_id: UUID) -> FileResponse:
+    async def download_file(self, file_id: UUID, user_id: Optional[UUID] = None) -> FileResponse:
         """Download original file."""
         try:
             self.log_operation("download_file", {"file_id": file_id})
@@ -405,6 +419,10 @@ class FileService(BaseService):
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR on file download).
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
+                raise FileError("You are not authorized to download this file")
             
             file_path = Path(file_registry.file_path)
             # Tolerate legacy relative paths stored before absolute resolution.
@@ -424,7 +442,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "download_file")
     
-    async def preview_file_data(self, file_id: UUID, rows: int = 10) -> Dict[str, Any]:
+    async def preview_file_data(self, file_id: UUID, rows: int = 10, user_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Preview file data (first N rows)."""
         try:
             self.log_operation("preview_file_data", {"file_id": file_id, "rows": rows})
@@ -432,6 +450,10 @@ class FileService(BaseService):
             file_registry = self.db.get(FileRegistry, file_id)
             if not file_registry:
                 raise FileError("File not found")
+            
+            # AUTHORIZATION: enforce ownership (prevent IDOR on data preview).
+            if user_id and file_registry.created_by and str(file_registry.created_by) != str(user_id):
+                raise FileError("You are not authorized to preview this file")
             
             file_path = Path(file_registry.file_path)
             if not file_path.exists():
@@ -516,7 +538,7 @@ class FileService(BaseService):
         except Exception as e:
             self.handle_error(e, "batch_upload")
     
-    async def process_file_content(self, file_id: int) -> Dict[str, Any]:
+    async def process_file_content(self, file_id: UUID) -> Dict[str, Any]:
         """Process file content dan extract data."""
         try:
             self.log_operation("process_file_content", {"file_id": file_id})
@@ -588,7 +610,7 @@ class FileService(BaseService):
         
         return processor_class(self.db)
     
-    async def _delete_related_data(self, file_id: int):
+    async def _delete_related_data(self, file_id: UUID):
         """Delete all related data for a file."""
         # Delete raw records
         raw_records_stmt = select(RawRecords).where(RawRecords.file_id == file_id)

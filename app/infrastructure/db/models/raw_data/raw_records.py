@@ -117,7 +117,7 @@ class RawRecordsUpdate(SQLModel):
 
 class RawRecordsRead(SQLModel):
     """Schema for reading raw record data"""
-    record_id: int
+    record_id: UUID
     file_id: str
     sheet_name: Optional[str]
     row_number: Optional[int]

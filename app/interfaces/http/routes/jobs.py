@@ -21,7 +21,7 @@ from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 
 router = APIRouter()
 
-@router.post("/", response_model=JobResponse)
+@router.post("", response_model=JobResponse)
 async def create_job(
     job_data: JobCreate,
     current_user: User = Depends(get_current_user),
@@ -35,7 +35,7 @@ async def create_job(
     job = db.get(EtlJob, job_dict["job_id"])
     return JobResponse.model_validate(job)
 
-@router.get("/", response_model=APIResponse[List[JobResponse]])
+@router.get("", response_model=APIResponse[List[JobResponse]])
 async def list_jobs(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),

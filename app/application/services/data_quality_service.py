@@ -130,7 +130,7 @@ class DataQualityService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_quality_rules")
     
-    async def get_quality_rule_by_id(self, rule_id: int) -> Optional[Dict[str, Any]]:
+    async def get_quality_rule_by_id(self, rule_id: UUID) -> Optional[Dict[str, Any]]:
         """Get quality rule by ID."""
         try:
             self.log_operation("get_quality_rule_by_id", {"rule_id": rule_id})
@@ -160,7 +160,7 @@ class DataQualityService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_quality_rule_by_id")
     
-    async def update_quality_rule(self, rule_id: int, rule_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_quality_rule(self, rule_id: UUID, rule_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a quality rule."""
         try:
             self.log_operation("update_quality_rule", {"rule_id": rule_id})
@@ -195,7 +195,7 @@ class DataQualityService(BaseService):
             self.db.rollback()
             self.handle_error(e, "update_quality_rule")
     
-    async def delete_quality_rule(self, rule_id: int) -> bool:
+    async def delete_quality_rule(self, rule_id: UUID) -> bool:
         """Delete a quality rule."""
         try:
             self.log_operation("delete_quality_rule", {"rule_id": rule_id})
@@ -217,7 +217,7 @@ class DataQualityService(BaseService):
         self,
         data_batch: List[Dict[str, Any]],
         entity_type: str,
-        rule_ids: List[int] = None,
+        rule_ids: List[UUID] = None,
         check_config: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Run quality check on data batch."""
@@ -366,7 +366,7 @@ class DataQualityService(BaseService):
     async def check_entity_quality(
         self,
         entity_type: str,
-        entity_ids: List[int] = None,
+        entity_ids: List[UUID] = None,
         quality_config: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Check quality of processed entities."""
@@ -412,7 +412,7 @@ class DataQualityService(BaseService):
     
     async def check_file_quality(
         self,
-        file_id: int,
+        file_id: UUID,
         validation_rules: List[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Check quality of file data."""
@@ -456,8 +456,8 @@ class DataQualityService(BaseService):
     
     async def check_job_quality(
         self,
-        job_id: int,
-        execution_id: int = None,
+        job_id: UUID,
+        execution_id: UUID = None,
         quality_config: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Check quality of ETL job results."""
@@ -467,7 +467,7 @@ class DataQualityService(BaseService):
             # Get job execution
             stmt = select(JobExecution).where(JobExecution.job_id == job_id)
             if execution_id:
-                stmt = stmt.where(JobExecution.execution_id == execution_id)
+                stmt = stmt.where(JobExecution.id == execution_id)
             else:
                 stmt = stmt.order_by(JobExecution.created_at.desc()).limit(1)
             
@@ -481,7 +481,7 @@ class DataQualityService(BaseService):
             
             return {
                 "job_id": job_id,
-                "execution_id": job_execution.execution_id,
+                "execution_id": job_execution.id,
                 "quality_check_status": "completed",
                 "message": "Job quality check completed - implement specific logic based on job type"
             }
@@ -695,7 +695,7 @@ class DataQualityService(BaseService):
     
     async def resolve_quality_alert(
         self,
-        alert_id: int,
+        alert_id: UUID,
         resolution_notes: str = None,
         resolved_by: int = None
     ) -> bool:
@@ -775,7 +775,7 @@ class DataQualityService(BaseService):
             if not expression.strip():
                 raise DataQualityError("Custom rule expression cannot be empty")
     
-    def _get_rules_by_ids(self, rule_ids: List[int]) -> List[QualityRule]:
+    def _get_rules_by_ids(self, rule_ids: List[UUID]) -> List[QualityRule]:
         """Get quality rules by IDs."""
         stmt = select(QualityRule).where(QualityRule.rule_id.in_(rule_ids))
         return self.db.execute(stmt).scalars().all()
@@ -1007,7 +1007,7 @@ class DataQualityService(BaseService):
         except Exception:
             return True  # If evaluation fails, assume rule passes
     
-    async def _get_rule_usage_stats(self, rule_id: int) -> Dict[str, Any]:
+    async def _get_rule_usage_stats(self, rule_id: UUID) -> Dict[str, Any]:
         """Get usage statistics for a quality rule."""
         try:
             # Get check results for this rule in the last 30 days

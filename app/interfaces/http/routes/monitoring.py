@@ -13,6 +13,7 @@ from app.infrastructure.db.manager import (
 from app.application.services.monitoring_service import MonitoringService
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
+from uuid import UUID
 
 router = APIRouter()
 
@@ -116,7 +117,7 @@ async def get_system_alerts(
 
 @router.post("/alerts/{alert_id}/dismiss")
 async def dismiss_alert(
-    alert_id: str,
+    alert_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

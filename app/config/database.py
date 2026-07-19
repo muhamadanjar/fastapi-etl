@@ -33,37 +33,37 @@ class DatabaseSettings(BaseSettings):
     url: Optional[str] = Field(
         default=None,
         description="Full database URL",
-        validation_alias=AliasChoices("database__url", "database_url"),
+        validation_alias=AliasChoices("DATABASE_URL", "database__url", "database_url"),
     )
     type: str = Field(
         default="postgresql",
         description="Database type: postgresql, mysql, or sqlite",
-        validation_alias=AliasChoices("database__type", "database_type"),
+        validation_alias=AliasChoices("DATABASE_TYPE", "database__type", "database_type"),
     )
     host: Optional[str] = Field(
         default="localhost",
         description="Database host",
-        validation_alias=AliasChoices("database__host", "database_host", "db_host"),
+        validation_alias=AliasChoices("DATABASE_HOST", "database__host", "database_host", "db_host"),
     )
     name: Optional[str] = Field(
         default=None,
         description="Database name",
-        validation_alias=AliasChoices("database__name", "database_name", "db_name"),
+        validation_alias=AliasChoices("DATABASE_NAME", "database__name", "database_name", "db_name"),
     )
     port: Optional[str] = Field(
         default="5432",
         description="Database port",
-        validation_alias=AliasChoices("database__port", "database_port", "db_port"),
+        validation_alias=AliasChoices("DATABASE_PORT", "database__port", "database_port", "db_port"),
     )
     user: Optional[str] = Field(
         default=None,
         description="Database user",
-        validation_alias=AliasChoices("database__user", "database_user", "db_user"),
+        validation_alias=AliasChoices("DATABASE_USER", "database__user", "database_user", "db_user"),
     )
     password: Optional[str] = Field(
         default=None,
         description="Database password",
-        validation_alias=AliasChoices("database__password", "database_password", "db_password"),
+        validation_alias=AliasChoices("DATABASE_PASSWORD", "database__password", "database_password", "db_password"),
     )
 
     pool_size: int = Field(default=5, description="Database pool size")

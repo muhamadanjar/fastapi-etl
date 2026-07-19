@@ -92,7 +92,7 @@ class JobOrchestrationService(BaseService):
         try:
             # Step 1: Validate parent job exists
             parent_job = self.db.exec(
-                select(EtlJob).where(EtlJob.job_id == parent_job_id)
+                select(EtlJob).where(EtlJob.id == parent_job_id)
             ).first()
 
             if not parent_job:
@@ -429,7 +429,7 @@ class JobOrchestrationService(BaseService):
         try:
             # Step 1: Get child job details
             child_job = self.db.exec(
-                select(EtlJob).where(EtlJob.job_id == child_job_id)
+                select(EtlJob).where(EtlJob.id == child_job_id)
             ).first()
 
             if not child_job:
@@ -458,7 +458,7 @@ class JobOrchestrationService(BaseService):
             self.db.commit()
             self.db.refresh(execution)
 
-            execution_id = execution.execution_id
+            execution_id = execution.id
 
             self.logger.debug(
                 f"[ORCHESTRATION] JobExecution created: {execution_id} "

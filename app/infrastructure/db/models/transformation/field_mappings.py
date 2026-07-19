@@ -44,7 +44,7 @@ class FieldMappingCreate(FieldMappingBase):
 
 class FieldMappingRead(FieldMappingBase):
     """Schema for reading field mappings."""
-    mapping_id: int
+    mapping_id: UUID
     created_at: datetime
 
 

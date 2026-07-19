@@ -73,7 +73,7 @@ async def list_transformation_rules(
 
 @router.get("/rules/{rule_id}")
 async def get_transformation_rule(
-    rule_id: str,
+    rule_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ):
@@ -101,7 +101,7 @@ async def get_transformation_rule(
 
 @router.put("/rules/{rule_id}")
 async def update_transformation_rule(
-    rule_id: str,
+    rule_id: UUID,
     rule_data: TransformationRuleUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -122,7 +122,7 @@ async def update_transformation_rule(
 
 @router.delete("/rules/{rule_id}")
 async def delete_transformation_rule(
-    rule_id: str,
+    rule_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ):
@@ -200,7 +200,7 @@ async def list_field_mappings(
 
 @router.get("/mappings/{mapping_id}")
 async def get_field_mapping(
-    mapping_id: str,
+    mapping_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ):
@@ -228,7 +228,7 @@ async def get_field_mapping(
 
 @router.put("/mappings/{mapping_id}")
 async def update_field_mapping(
-    mapping_id: str,
+    mapping_id: UUID,
     mapping_data: FieldMappingUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -249,7 +249,7 @@ async def update_field_mapping(
 
 @router.delete("/mappings/{mapping_id}")
 async def delete_field_mapping(
-    mapping_id: str,
+    mapping_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ):
