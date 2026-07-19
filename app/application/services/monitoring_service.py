@@ -517,7 +517,7 @@ class MonitoringService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_system_metrics")
 
-    async def get_job_performance(self, job_id: str = None, period: str = "7d") -> Dict[str, Any]:
+    async def get_job_performance(self, job_id: UUID = None, period: str = "7d") -> Dict[str, Any]:
         """Get job performance metrics (wrapper with period conversion)."""
         try:
             period_map = {"1d": 1, "7d": 7, "30d": 30}
@@ -589,7 +589,7 @@ class MonitoringService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_storage_usage")
 
-    async def dismiss_alert(self, alert_id: str, user_id: str) -> Dict[str, Any]:
+    async def dismiss_alert(self, alert_id: UUID, user_id: UUID) -> Dict[str, Any]:
         """Dismiss an active alert."""
         try:
             self.log_operation("dismiss_alert", {"alert_id": alert_id, "user_id": user_id})
