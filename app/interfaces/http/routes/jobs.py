@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, status, Query, Body
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -17,6 +17,7 @@ from app.schemas.transformation import TransformationRuleCreate, FieldMappingCre
 from app.schemas.data_quality_schema import QualityRuleCreate
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
+from app.core.exceptions import NotFoundError
 from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
 
 router = APIRouter()
@@ -79,10 +80,7 @@ async def get_job(
     from app.infrastructure.db.models.etl_control.etl_jobs import EtlJob
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
+        raise NotFoundError(message="Job not found")
     return JobResponse.model_validate(job)
 
 @router.put("/{job_id}", response_model=JobResponse)
@@ -193,7 +191,7 @@ async def create_transformation_rule(
     """Create a transformation rule for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     transformation_service = TransformationService(db)
     rule_dict = rule_data.model_dump()
@@ -211,7 +209,7 @@ async def get_transformation_rules(
     """Get transformation rules for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     transformation_service = TransformationService(db)
     return await transformation_service.get_transformation_rules(source_format, target_format, job_id)
@@ -226,7 +224,7 @@ async def create_field_mapping(
     """Create a field mapping for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     transformation_service = TransformationService(db)
     mapping_dict = mapping_data.model_dump()
@@ -244,7 +242,7 @@ async def get_field_mappings(
     """Get field mappings for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     transformation_service = TransformationService(db)
     return await transformation_service.get_field_mappings(source_entity, target_entity, job_id)
@@ -259,7 +257,7 @@ async def create_quality_rule(
     """Create a quality rule for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     data_quality_service = DataQualityService(db)
     rule_dict = rule_data.model_dump()
@@ -280,7 +278,7 @@ async def get_quality_rules(
     """Get quality rules for a job"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     data_quality_service = DataQualityService(db)
     return await data_quality_service.get_quality_rules(entity_type, rule_type, is_active, skip, limit, job_id)
@@ -294,6 +292,6 @@ async def get_job_schedule(
     """Get job schedule configuration"""
     job = db.get(EtlJob, job_id)
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        raise NotFoundError(message="Job not found")
 
     return {"schedule_expression": job.schedule_expression}

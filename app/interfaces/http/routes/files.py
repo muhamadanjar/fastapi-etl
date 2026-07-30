@@ -12,6 +12,7 @@ from app.schemas.upload_session import (
     UploadSessionStatusResponse,
 )
 from app.application.services.file_service import FileService
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.infrastructure.db.manager import get_session_dependency
 
@@ -52,10 +53,7 @@ async def batch_upload(
 
     for file in files:
         if file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File {file.filename} has unsupported type {file.content_type}"
-            )
+            raise BadRequestError(message=f"File {file.filename} has unsupported type {file.content_type}")
 
     file_service = FileService(db)
     return await file_service.batch_upload(
@@ -117,10 +115,7 @@ async def upload_file(
     ]
 
     if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {file.content_type} not supported. Allowed types: {', '.join(allowed_types)}"
-        )
+        raise BadRequestError(message=f"File type {file.content_type} not supported. Allowed types: {', '.join(allowed_types)}")
 
     return await file_service.upload_file(
         file=file,
@@ -166,10 +161,7 @@ async def download_file(
         file_service = FileService(db)
         return await file_service.download_file(file_id)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise NotFoundError(message=str(e))
 
 
 @router.get("/{file_id}/preview")
@@ -184,10 +176,7 @@ async def preview_file_data(
         file_service = FileService(db)
         return await file_service.preview_file_data(file_id, rows)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 
 @router.get("/{file_id}/processing-status")
@@ -202,10 +191,7 @@ async def get_processing_status(
         file_detail = await file_service.get_file_detail(file_id)
 
         if not file_detail:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="File not found"
-            )
+            raise NotFoundError(message="File not found")
 
         return {
             "file_id": file_id,
@@ -216,13 +202,10 @@ async def get_processing_status(
             "invalid_records": file_detail.validation_result.invalid_records,
             "upload_date": file_detail.file.upload_date
         }
-    except HTTPException:
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 
 @router.post("/{file_id}/process")
@@ -243,10 +226,7 @@ async def process_file(
             "status": "processing"
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 
 @router.post("/{file_id}/reprocess")
@@ -267,10 +247,7 @@ async def reprocess_file(
             "status": "processing"
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 
 @router.get("/{file_id}", response_model=FileDetailResponse)
@@ -284,10 +261,7 @@ async def get_file_detail(
     file_detail = await file_service.get_file_detail(file_id)
 
     if not file_detail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
-        )
+        raise NotFoundError(message="File not found")
 
     return file_detail
 
@@ -306,12 +280,6 @@ async def delete_file(
         if success:
             return {"message": "File deleted successfully", "file_id": str(file_id)}
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete file"
-            )
+            raise BadRequestError(message="Failed to delete file")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))

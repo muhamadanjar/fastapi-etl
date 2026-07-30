@@ -12,6 +12,7 @@ from app.schemas.data_quality_schema import (
 )
 from app.application.services.data_quality_service import DataQualityService
 from app.schemas.remote_user import RemoteUserInfo as User
+from app.core.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter()
 
@@ -30,10 +31,7 @@ async def create_quality_rule(
         data_quality_service = DataQualityService(db)
         return await data_quality_service.create_quality_rule(rule_data.dict())
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/rules", response_model=List[QualityRuleRead])
 async def list_quality_rules(
@@ -56,10 +54,7 @@ async def list_quality_rules(
             limit=limit
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/rules/{rule_id}", response_model=QualityRuleRead)
 async def get_quality_rule(
@@ -73,19 +68,13 @@ async def get_quality_rule(
         rule = await data_quality_service.get_quality_rule_by_id(rule_id)
         
         if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Quality rule not found"
-            )
+            raise NotFoundError(message="Quality rule not found")
         
         return rule
-    except HTTPException:
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.put("/rules/{rule_id}", response_model=Dict[str, Any])
 async def update_quality_rule(
@@ -102,10 +91,7 @@ async def update_quality_rule(
             rule_data.dict(exclude_unset=True)
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.delete("/rules/{rule_id}")
 async def delete_quality_rule(
@@ -121,17 +107,11 @@ async def delete_quality_rule(
         if success:
             return {"message": "Quality rule deleted successfully"}
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete quality rule"
-            )
-    except HTTPException:
+            raise BadRequestError(message="Failed to delete quality rule")
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # QUALITY CHECKS EXECUTION
@@ -153,10 +133,7 @@ async def run_quality_check(
             check_config=check_request.check_config
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/validate", response_model=ValidationResponse)
 async def validate_data(
@@ -173,10 +150,7 @@ async def validate_data(
             validation_config=validation_request.validation_config
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/check-entity/{entity_type}")
 async def check_entity_quality(
@@ -195,10 +169,7 @@ async def check_entity_quality(
             quality_config=quality_config or {}
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/check-file/{file_id}")
 async def check_file_quality(
@@ -215,10 +186,7 @@ async def check_file_quality(
             validation_rules=validation_rules or []
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/check-job/{job_id}")
 async def check_job_quality(
@@ -237,10 +205,7 @@ async def check_job_quality(
             quality_config=quality_config or {}
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # QUALITY REPORTS
@@ -261,10 +226,7 @@ async def generate_quality_report(
             report_config=report_request.report_config
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/report/summary")
 async def get_quality_summary(
@@ -283,10 +245,7 @@ async def get_quality_summary(
             date_to=date_to
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/report/trends")
 async def get_quality_trends(
@@ -305,10 +264,7 @@ async def get_quality_trends(
             limit=limit
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # QUALITY MONITORING
@@ -335,10 +291,7 @@ async def get_quality_alerts(
             limit=limit
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/monitor/alerts/{alert_id}/resolve")
 async def resolve_quality_alert(
@@ -359,17 +312,11 @@ async def resolve_quality_alert(
         if success:
             return {"message": "Quality alert resolved successfully"}
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to resolve quality alert"
-            )
-    except HTTPException:
+            raise BadRequestError(message="Failed to resolve quality alert")
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # UTILITY ENDPOINTS
@@ -406,10 +353,7 @@ async def get_quality_metrics(
         data_quality_service = DataQualityService(db)
         return await data_quality_service.get_quality_metrics(entity_type=entity_type)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/schedule-check")
 async def schedule_quality_check(
@@ -432,7 +376,4 @@ async def schedule_quality_check(
             "job_id": str(job_id)
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))

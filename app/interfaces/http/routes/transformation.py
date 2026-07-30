@@ -13,6 +13,7 @@ from app.schemas.transformation import (
 from app.application.services.transformation_service import TransformationService
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
+from app.core.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter()
 
@@ -32,10 +33,7 @@ async def create_transformation_rule(
         result = await transformation_service.create_transformation_rule(rule_data.dict())
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/rules")
 async def list_transformation_rules(
@@ -66,10 +64,7 @@ async def list_transformation_rules(
         return APIResponse.success(data=rules[skip:skip + limit])
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/rules/{rule_id}")
 async def get_transformation_rule(
@@ -84,20 +79,14 @@ async def get_transformation_rule(
 
         rule = next((r for r in rules if r.get('rule_id') == rule_id), None)
         if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Transformation rule not found"
-            )
+            raise NotFoundError(message="Transformation rule not found")
 
         return APIResponse.success(data=rule)
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.put("/rules/{rule_id}")
 async def update_transformation_rule(
@@ -115,10 +104,7 @@ async def update_transformation_rule(
         )
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.delete("/rules/{rule_id}")
 async def delete_transformation_rule(
@@ -134,17 +120,11 @@ async def delete_transformation_rule(
         if success:
             return APIResponse.success(data={"message": "Transformation rule deleted successfully"})
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete transformation rule"
-            )
-    except HTTPException:
+            raise BadRequestError(message="Failed to delete transformation rule")
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # FIELD MAPPINGS ENDPOINTS
@@ -162,10 +142,7 @@ async def create_field_mapping(
         result = await transformation_service.create_field_mapping(mapping_data.dict())
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/mappings")
 async def list_field_mappings(
@@ -193,10 +170,7 @@ async def list_field_mappings(
         return APIResponse.success(data=mappings[skip:skip + limit])
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.get("/mappings/{mapping_id}")
 async def get_field_mapping(
@@ -211,20 +185,14 @@ async def get_field_mapping(
 
         mapping = next((m for m in mappings if m.get('mapping_id') == mapping_id), None)
         if not mapping:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Field mapping not found"
-            )
+            raise NotFoundError(message="Field mapping not found")
 
         return APIResponse.success(data=mapping)
 
-    except HTTPException:
+    except (HTTPException, NotFoundError, BadRequestError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.put("/mappings/{mapping_id}")
 async def update_field_mapping(
@@ -242,10 +210,7 @@ async def update_field_mapping(
         )
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.delete("/mappings/{mapping_id}")
 async def delete_field_mapping(
@@ -261,17 +226,11 @@ async def delete_field_mapping(
         if success:
             return APIResponse.success(data={"message": "Field mapping deleted successfully"})
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to delete field mapping"
-            )
-    except HTTPException:
+            raise BadRequestError(message="Failed to delete field mapping")
+    except (HTTPException, BadRequestError, NotFoundError):
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # DATA TRANSFORMATION ENDPOINTS
@@ -295,10 +254,7 @@ async def transform_data_batch(
         return APIResponse.success(data=result)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/transform-custom")
 async def apply_custom_transformation(
@@ -318,10 +274,7 @@ async def apply_custom_transformation(
         return APIResponse.success(data=result)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 @router.post("/test-transformation")
 async def test_transformation(
@@ -340,10 +293,7 @@ async def test_transformation(
         return APIResponse.success(data=result)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # ==============================================
 # UTILITY ENDPOINTS
@@ -378,10 +328,7 @@ async def get_available_entities(
         })
 
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 # @router.get("/rules/{rule_id}/preview")
 # async def preview_transformation_rule(

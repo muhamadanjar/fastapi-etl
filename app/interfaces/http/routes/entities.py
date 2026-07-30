@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from app.schemas.entity_schemas import (
 )
 from app.application.services.entity_service import EntityService
 from app.schemas.remote_user import RemoteUserInfo as User
+from app.core.exceptions import NotFoundError
 
 router = APIRouter()
 
@@ -86,10 +87,7 @@ async def get_entity(
     entity_service = EntityService(db)
     entity = await entity_service.get_entity_by_id(int(entity_id))
     if not entity:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Entity not found"
-        )
+        raise NotFoundError(message="Entity not found")
     return EntityResponse.from_orm(entity)
 
 @router.put("/{entity_id}", response_model=EntityResponse)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from app.infrastructure.db.manager import get_session_dependency
 from app.application.services.config_service import ConfigService
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
+from app.core.exceptions import BadRequestError, NotFoundError
 
 router = APIRouter()
 
@@ -37,16 +38,10 @@ async def test_data_source_connection(
     config_service = ConfigService(db)
     source_id = data.get("source_id")
     if not source_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="source_id is required"
-        )
+        raise BadRequestError(message="source_id is required")
     result = await config_service.test_connection(UUID(source_id))
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Data source not found"
-        )
+        raise NotFoundError(message="Data source not found")
     return APIResponse.success(data=result)
 
 
@@ -92,10 +87,7 @@ async def get_data_source(
     config_service = ConfigService(db)
     result = await config_service.get_data_source(source_id)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Data source not found"
-        )
+        raise NotFoundError(message="Data source not found")
     return APIResponse.success(data=result)
 
 
@@ -122,10 +114,7 @@ async def delete_data_source(
     config_service = ConfigService(db)
     success = await config_service.delete_data_source(source_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Data source not found"
-        )
+        raise NotFoundError(message="Data source not found")
     return APIResponse.success(data={"message": "Data source deleted successfully"})
 
 
@@ -173,10 +162,7 @@ async def get_data_dictionary_entry(
     config_service = ConfigService(db)
     result = await config_service.get_data_dictionary_entry(dict_id)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dictionary entry not found"
-        )
+        raise NotFoundError(message="Dictionary entry not found")
     return APIResponse.success(data=result)
 
 
@@ -203,10 +189,7 @@ async def delete_data_dictionary_entry(
     config_service = ConfigService(db)
     success = await config_service.delete_data_dictionary_entry(dict_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dictionary entry not found"
-        )
+        raise NotFoundError(message="Dictionary entry not found")
     return APIResponse.success(data={"message": "Dictionary entry deleted successfully"})
 
 
@@ -225,10 +208,7 @@ async def get_config_by_key(
     config_service = ConfigService(db)
     result = await config_service.get_config_by_key(config_category, config_key)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration not found"
-        )
+        raise NotFoundError(message="Configuration not found")
     return APIResponse.success(data=result)
 
 
@@ -272,10 +252,7 @@ async def get_system_config(
     config_service = ConfigService(db)
     result = await config_service.get_config(config_id)
     if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration not found"
-        )
+        raise NotFoundError(message="Configuration not found")
     return APIResponse.success(data=result)
 
 
@@ -302,8 +279,5 @@ async def delete_system_config(
     config_service = ConfigService(db)
     success = await config_service.delete_config(config_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration not found"
-        )
+        raise NotFoundError(message="Configuration not found")
     return APIResponse.success(data={"message": "Configuration deleted successfully"})

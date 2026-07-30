@@ -1,5 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks
 from app.infrastructure.db.etl_repo_impl import ETLRepositoryImpl
+from app.core.exceptions import NotFoundError
 import shutil
 import uuid
 import os
@@ -34,5 +35,5 @@ def get_etl_status(job_id: str):
     # Check job status and result from DB (or could be Redis)
     result = repo.get_result(job_id)
     if not result:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError(message="Job not found")
     return result

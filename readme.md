@@ -1,3 +1,18 @@
+## Project Initiation (Knowledge Graph)
+
+New clone / new contributor onboarding — build the codebase knowledge graph before diving in:
+
+```bash
+# One-time: build graph + wire graphify into Claude Code (CLAUDE.md + PreToolUse hooks)
+/graphify .
+graphify claude install
+
+# Optional: auto-rebuild graph on every commit
+graphify hook install
+```
+
+After setup, ask Claude Code questions directly (`graphify query "<question>"`, `graphify explain "<Symbol>"`, `graphify path "<A>" "<B>"`) instead of raw grep/manual file browsing — see `## graphify` section in [`CLAUDE.md`](./CLAUDE.md). After pulling changes: `graphify update .` to refresh (AST-only, no API cost).
+
 ```
 fastapi-clean-arch-starter/
 │

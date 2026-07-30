@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, status, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
@@ -10,7 +10,7 @@ from app.schemas.response_schemas import ReportResponse, ReportRequest
 from app.application.services.report_service import ReportService
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.core.response import APIResponse
-from app.core.exceptions import ServiceError
+from app.core.exceptions import ServiceError, NotFoundError, InternalServerError, NotImplementedException
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ async def generate_report(
         report = await report_service.generate_report(report_request, current_user.id, background_tasks)
         return APIResponse.success(data=ReportResponse.from_orm(report))
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/templates")
 async def get_report_templates(
@@ -40,7 +40,7 @@ async def get_report_templates(
         result = await report_service.get_report_templates()
         return APIResponse.success(data=result)
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
@@ -54,7 +54,7 @@ async def get_dashboard_summary(
         result = await report_service.get_dashboard_summary(period)
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 @router.get("/analytics/data-processing")
 async def get_data_processing_analytics(
@@ -69,7 +69,7 @@ async def get_data_processing_analytics(
         result = await report_service.get_data_processing_analytics(period, granularity)
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 @router.get("/analytics/data-quality")
 async def get_data_quality_analytics(
@@ -84,7 +84,7 @@ async def get_data_quality_analytics(
         result = await report_service.get_data_quality_analytics(period, entity_type)
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 @router.get("/analytics/entity-growth")
 async def get_entity_growth_analytics(
@@ -99,7 +99,7 @@ async def get_entity_growth_analytics(
         result = await report_service.get_entity_growth_analytics(period, entity_type)
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 @router.get("/analytics/performance")
 async def get_performance_analytics(
@@ -114,7 +114,7 @@ async def get_performance_analytics(
         result = await report_service.get_performance_analytics(period, job_type)
         return APIResponse.success(data=result)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 @router.post("/schedule")
 async def schedule_report(
@@ -129,7 +129,7 @@ async def schedule_report(
         schedule_id = await report_service.schedule_report(report_request, schedule_expression, current_user.id)
         return APIResponse.success(data={"schedule_id": str(schedule_id)})
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/export/entities")
 async def export_entities(
@@ -148,7 +148,7 @@ async def export_entities(
             filename=f"entities_export.{format}"
         )
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/export/job-executions")
 async def export_job_executions(
@@ -168,7 +168,7 @@ async def export_job_executions(
             filename=f"job_executions_export.{format}"
         )
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/export/data-lineage")
 async def export_data_lineage(
@@ -187,7 +187,7 @@ async def export_data_lineage(
             filename=f"data_lineage_export.{format}"
         )
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/")
 async def list_reports(
@@ -204,7 +204,7 @@ async def list_reports(
         result = await report_service.list_reports(skip, limit, report_type, status, current_user.id)
         return APIResponse.success(data=result)
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/{report_id}")
 async def get_report(
@@ -217,13 +217,10 @@ async def get_report(
         report_service = ReportService(db)
         report = await report_service.get_report(report_id, current_user.id)
         if not report:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Report not found"
-            )
+            raise NotFoundError(message="Report not found")
         return APIResponse.success(data=ReportResponse.from_orm(report))
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.get("/{report_id}/download")
 async def download_report(
@@ -242,7 +239,7 @@ async def download_report(
             filename=f"report_{report_id}.{format}"
         )
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")
 
 @router.delete("/{report_id}")
 async def delete_report(
@@ -256,4 +253,4 @@ async def delete_report(
         await report_service.delete_report(report_id, current_user.id)
         return APIResponse.success(data={"message": "Report deleted successfully"})
     except ServiceError:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not yet implemented")
+        raise NotImplementedException(message="Not yet implemented")

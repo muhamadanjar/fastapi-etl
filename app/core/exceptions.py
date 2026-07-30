@@ -176,9 +176,25 @@ class ConflictError(AppException):
         )
 
 
+class NotImplementedException(AppException):
+    """Exception raised for endpoints/features not yet implemented."""
+
+    def __init__(
+        self,
+        message: str = "Not implemented",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="NOT_IMPLEMENTED",
+            details=details,
+            status_code=501,
+        )
+
+
 class BadRequestError(AppException):
     """Exception raised for bad requests."""
-    
+
     def __init__(
         self,
         message: str = "Bad request",

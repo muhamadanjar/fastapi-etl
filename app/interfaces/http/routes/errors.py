@@ -5,12 +5,13 @@ API routes untuk managing error logs.
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.infrastructure.db import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.application.services.error_service import ErrorService
+from app.core.exceptions import BadRequestError, InternalServerError
 from app.infrastructure.db.models.etl_control.error_logs import (
     ErrorType,
     ErrorSeverity
@@ -75,10 +76,7 @@ async def get_errors(
             data=errors
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/jobs/{job_id}/errors", response_model=ErrorResponse)
@@ -129,10 +127,7 @@ async def get_job_errors(
             }
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/executions/{execution_id}/errors", response_model=ErrorResponse)
@@ -160,10 +155,7 @@ async def get_execution_errors(
             data=errors
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.patch("/{error_id}/resolve", response_model=ErrorResponse)
@@ -189,10 +181,7 @@ async def resolve_error(
             data=result
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
 
 
 @router.get("/summary", response_model=ErrorResponse)
@@ -220,10 +209,7 @@ async def get_error_summary(
             data=summary
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/trends", response_model=ErrorResponse)
@@ -279,7 +265,4 @@ async def get_error_trends(
             }
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))

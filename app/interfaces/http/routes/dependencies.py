@@ -4,12 +4,13 @@ API routes untuk managing job dependencies.
 
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.infrastructure.db.manager import get_session_dependency
 from app.interfaces.dependencies import get_current_user
 from app.application.services.dependency_service import DependencyService, DependencyError
+from app.core.exceptions import BadRequestError, NotFoundError, InternalServerError
 from app.infrastructure.db.models.etl_control.job_dependencies import (
     DependencyType,
     JobDependencyCreate,
@@ -56,10 +57,7 @@ async def get_executable_jobs(
             data={"executable_jobs": jobs, "total": len(jobs)}
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 # Specific dependency routes (with suffixes like /check, /dependency-tree)
@@ -85,10 +83,7 @@ async def check_dependencies(
             data=status_info
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/{job_id}/dependency-tree", response_model=DependencyResponse)
@@ -113,10 +108,7 @@ async def get_dependency_tree(
             data=tree
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.delete("/{job_id}/dependencies/{dependency_id}", response_model=DependencyResponse)
@@ -141,15 +133,9 @@ async def remove_job_dependency(
             data={"dependency_id": dependency_id}
         )
     except DependencyError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise NotFoundError(message=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 # Generic dependency routes last (lowest specificity)
@@ -176,10 +162,7 @@ async def get_job_dependencies(
             data=dependencies
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))
 
 
 @router.post("/{job_id}/dependencies", response_model=DependencyResponse, status_code=status.HTTP_201_CREATED)
@@ -210,12 +193,6 @@ async def add_job_dependency(
             data=result
         )
     except DependencyError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise BadRequestError(message=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise InternalServerError(message=str(e))

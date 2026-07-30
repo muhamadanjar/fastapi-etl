@@ -4,7 +4,7 @@ API routes for rejected records management.
 
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.infrastructure.db.manager import get_session_dependency
@@ -16,6 +16,7 @@ from app.infrastructure.db.models.raw_data.rejected_records import (
 )
 from app.interfaces.dependencies import get_current_user
 from app.core.response import APIResponse
+from app.core.exceptions import NotFoundError, InternalServerError
 
 router = APIRouter(tags=["Rejected Records"])
 
@@ -52,7 +53,7 @@ async def list_rejected_records(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/files/{file_id}", response_model=APIResponse[List[RejectedRecordRead]])
@@ -81,7 +82,7 @@ async def get_file_rejected_records(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.get("/summary", response_model=APIResponse[dict])
@@ -108,7 +109,7 @@ async def get_rejection_summary(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.patch("/{rejection_id}/resolve", response_model=APIResponse[RejectedRecordRead])
@@ -132,7 +133,9 @@ async def mark_record_resolved(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 500, detail=str(e))
+        if "not found" in str(e).lower():
+            raise NotFoundError(message=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.post("/{rejection_id}/retry", response_model=APIResponse[RejectedRecordRead])
@@ -155,7 +158,9 @@ async def retry_rejected_record(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 500, detail=str(e))
+        if "not found" in str(e).lower():
+            raise NotFoundError(message=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.delete("/{rejection_id}", response_model=APIResponse[bool])
@@ -178,7 +183,9 @@ async def delete_rejected_record(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 500, detail=str(e))
+        if "not found" in str(e).lower():
+            raise NotFoundError(message=str(e))
+        raise InternalServerError(message=str(e))
 
 
 @router.post("/export", response_model=APIResponse[str])
@@ -207,4 +214,4 @@ async def export_rejected_records(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalServerError(message=str(e))

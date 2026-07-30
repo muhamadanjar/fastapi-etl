@@ -5,7 +5,7 @@ API routes for performance metrics management.
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.infrastructure.db.manager import get_session_dependency
@@ -13,6 +13,7 @@ from app.application.services.metrics_service import MetricsService
 from app.infrastructure.db.models.etl_control.performance_metrics import PerformanceMetricRead
 from app.interfaces.dependencies import get_current_user
 from app.core.response import APIResponse
+from app.core.exceptions import MonitoringException
 
 router = APIRouter(prefix="/metrics", tags=["Performance Metrics"])
 
@@ -46,7 +47,7 @@ async def list_metrics(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise MonitoringException(message=str(e))
 
 
 @router.get("/executions/{execution_id}", response_model=APIResponse[List[PerformanceMetricRead]])
@@ -68,7 +69,7 @@ async def get_execution_metrics(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise MonitoringException(message=str(e))
 
 
 @router.get("/summary", response_model=APIResponse[dict])
@@ -94,7 +95,7 @@ async def get_metrics_summary(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise MonitoringException(message=str(e))
 
 
 @router.get("/trends", response_model=APIResponse[List[dict]])
@@ -122,7 +123,7 @@ async def get_metrics_trends(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise MonitoringException(message=str(e))
 
 
 @router.get("/system", response_model=APIResponse[dict])
@@ -143,4 +144,4 @@ async def get_system_metrics(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise MonitoringException(message=str(e))
