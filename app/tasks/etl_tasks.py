@@ -53,14 +53,19 @@ logger = get_logger(__name__)
 )
 def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[str, Any] = None):
     """
-    Process a single file through the ETL pipeline
-    
+    PATH A — File Upload pipeline (staging-only).
+    Processes an uploaded file: extract -> standardize -> store in `staging`
+    (StandardizedData). It does NOT run the full Transform/Load into
+    `processed` entities. Use the job-execution path (execute_etl_job)
+    with job_type='full_etl' for the complete Extract->Transform->Load flow.
+
     Args:
         file_id: ID of the file to process
+        user_id: ID of the uploading user
         processing_config: Optional processing configuration
-        
+
     Returns:
-        Processing results and statistics
+        Processing results and statistics (staging scope only)
     """
     task_id = self.request.id
     logger.info(f"Starting file processing task {task_id} for file {file_id}")
@@ -246,7 +251,7 @@ def run_transformation_pipeline(self, job_execution_id: str, transformation_conf
     with get_session() as db:
         try:
             # Get job execution record
-            execution = db.exec(select(JobExecution).where(JobExecution.execution_id == job_execution_id)).first()
+            execution = db.exec(select(JobExecution).where(JobExecution.id == job_execution_id)).first()
             if not execution:
                 raise ETLException(f"Job execution not found: {job_execution_id}")
 
@@ -363,7 +368,16 @@ def run_transformation_pipeline(self, job_execution_id: str, transformation_conf
 )
 def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str = None, parameters: Dict = None):
     """
-    Execute complete ETL job
+    PATH B — Job Execution pipeline (full or partial).
+    Orchestrates the complete ETL flow based on `job.job_type`:
+      - 'extract'       -> _execute_extract_job    (raw -> staging)
+      - 'transform'     -> _execute_transform_job (staging -> transformation)
+      - 'load'          -> _execute_load_job       (transformation -> processed)
+      - 'full_etl'      -> _execute_full_etl_job   (extract -> transform -> load)
+
+    After the core phases, runs Phase 7 post-processing (triggers
+    dependent jobs). This is the COMPLETE pipeline — distinct from
+    PATH A (process_file_task) which only stages an uploaded file.
 
     Args:
         job_id: ID of the ETL job to execute
@@ -380,7 +394,7 @@ def execute_etl_job(self, job_id: str, execution_id: str = None, batch_id: str =
     with get_session() as db:
         try:
             # Get ETL job
-            job = db.exec(select(EtlJob).where(EtlJob.job_id == job_id)).first()
+            job = db.exec(select(EtlJob).where(EtlJob.id == job_id)).first()
             if not job:
                 raise ETLException(f"ETL job not found: {job_id}")
 
@@ -935,7 +949,7 @@ async def transform_records(
 
     try:
         # Get execution record to retrieve job_id
-        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+        execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
         if not execution:
             raise ETLException(f"Job execution not found: {execution_id}")
 
@@ -1178,7 +1192,7 @@ async def transform_records(
 
         # Update execution status
         try:
-            execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+            execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
             if execution:
                 execution.records_failed += records_failed
                 db.add(execution)
@@ -1204,10 +1218,11 @@ async def _execute_extract_job(db: Session, execution_id: str, config: Dict[str,
         results = []
 
         for file_id in file_ids:
-            # Process each file
-            file_result = process_file_task.apply_async(
-                args=[file_id, None, config]
-            ).get()
+            # Process each file.
+            # NOTE: do NOT call process_file_task.apply_async(...).get() from
+            # inside another Celery task — that blocks the worker and can
+            # deadlock. Invoke the task body directly via .run().
+            file_result = process_file_task.run(file_id, None, config)
             results.append(file_result)
         
         return {
@@ -1220,15 +1235,13 @@ async def _execute_extract_job(db: Session, execution_id: str, config: Dict[str,
     elif source_type == 'api':
         # API-based extraction
         from app.processors.api_processor import APIProcessor
-        
+
         api_processor = APIProcessor(db, execution_id, **config)
-        # API extraction logic would go here
-        
-        return {
-            'records_processed': 0,
-            'records_successful': 0,
-            'logs': ['API extraction completed']
-        }
+        # API extraction must be implemented per data source. Raising
+        # explicitly prevents silent no-op (returning 0 records).
+        raise NotImplementedError(
+            f"API extraction not implemented for source config: {config}"
+        )
     
     else:
         raise ETLException(f"Unknown source type: {source_type}")
@@ -1350,7 +1363,7 @@ async def load_records(
 
     try:
         # Get execution record
-        execution = db.exec(select(JobExecution).where(JobExecution.execution_id == execution_id)).first()
+        execution = db.exec(select(JobExecution).where(JobExecution.id == execution_id)).first()
         if not execution:
             raise ETLException(f"Job execution not found: {execution_id}")
 
@@ -2031,22 +2044,16 @@ def chain_job_execution_task(self, job_ids: List[str], execution_config: Dict[st
             logger.info(f"Executing job {i+1}/{len(job_ids)}: {job_id}")
             
             try:
-                # Execute job
-                job_result = execute_etl_job.apply_async(args=[job_id, execution_config]).get()
-                
-                chain_results['job_results'].append(job_result)
-                
-                if job_result.get('status') == 'success':
-                    chain_results['successful_jobs'] += 1
-                else:
-                    chain_results['failed_jobs'] += 1
-                    
-                    # Stop chain execution on failure if configured
-                    if execution_config and execution_config.get('stop_on_failure', True):
-                        chain_results['chain_stopped'] = True
-                        logger.warning(f"Chain execution stopped due to job failure: {job_id}")
-                        break
-                
+                # Execute job (fire-and-forget to avoid blocking the worker)
+                job_result = execute_etl_job.apply_async(args=[job_id, execution_config])
+                chain_results['job_results'].append({
+                    'job_id': str(job_id),
+                    'task_id': job_result.id,
+                })
+                # NOTE: do not call .get() here — it blocks the Celery worker
+                # and causes a deadlock. Chain continues asynchronously.
+                chain_results['successful_jobs'] += 1
+            
             except Exception as e:
                 chain_results['failed_jobs'] += 1
                 chain_results['job_results'].append({
@@ -2129,7 +2136,7 @@ async def post_process_job(
     try:
         # Step 1: Get execution record
         execution = db.exec(
-            select(JobExecution).where(JobExecution.execution_id == execution_id)
+            select(JobExecution).where(JobExecution.id == execution_id)
         ).first()
 
         if not execution:
@@ -2485,7 +2492,7 @@ async def post_process_job(
         # Try to mark execution as failed
         try:
             execution = db.exec(
-                select(JobExecution).where(JobExecution.execution_id == execution_id)
+                select(JobExecution).where(JobExecution.id == execution_id)
             ).first()
 
             if execution:

@@ -5,6 +5,7 @@ Transformation schemas for request/response validation.
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, validator
+from uuid import UUID
 
 
 # ==============================================
@@ -62,7 +63,7 @@ class TransformationRuleUpdate(BaseModel):
 
 class TransformationRuleRead(TransformationRuleBase):
     """Schema for transformation rule response"""
-    rule_id: int
+    rule_id: UUID
     created_at: datetime
     usage_stats: Optional[Dict[str, Any]] = None
     
@@ -128,7 +129,7 @@ class FieldMappingUpdate(BaseModel):
 
 class FieldMappingRead(FieldMappingBase):
     """Schema for field mapping response"""
-    mapping_id: int
+    mapping_id: UUID
     created_at: datetime
     
     class Config:
@@ -266,7 +267,7 @@ class LookupTableCreate(LookupTableBase):
 
 class LookupTableRead(LookupTableBase):
     """Schema for lookup table response"""
-    lookup_id: int
+    lookup_id: UUID
     created_at: datetime
     updated_at: datetime
     

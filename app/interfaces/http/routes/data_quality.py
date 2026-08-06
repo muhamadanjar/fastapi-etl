@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session
 from typing import List, Optional, Dict, Any
+from uuid import UUID
 
 from app.interfaces.dependencies import get_current_user
 from app.infrastructure.db.manager import get_session_dependency
@@ -58,7 +59,7 @@ async def list_quality_rules(
 
 @router.get("/rules/{rule_id}", response_model=QualityRuleRead)
 async def get_quality_rule(
-    rule_id: int,
+    rule_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> QualityRuleRead:
@@ -78,7 +79,7 @@ async def get_quality_rule(
 
 @router.put("/rules/{rule_id}", response_model=Dict[str, Any])
 async def update_quality_rule(
-    rule_id: int,
+    rule_id: UUID,
     rule_data: QualityRuleUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -95,7 +96,7 @@ async def update_quality_rule(
 
 @router.delete("/rules/{rule_id}")
 async def delete_quality_rule(
-    rule_id: int,
+    rule_id: UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
 ) -> Dict[str, str]:
@@ -155,7 +156,7 @@ async def validate_data(
 @router.post("/check-entity/{entity_type}")
 async def check_entity_quality(
     entity_type: str,
-    entity_ids: Optional[List[int]] = None,
+    entity_ids: Optional[List[UUID]] = None,
     quality_config: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -173,7 +174,7 @@ async def check_entity_quality(
 
 @router.post("/check-file/{file_id}")
 async def check_file_quality(
-    file_id: int,
+    file_id: UUID,
     validation_rules: Optional[List[Dict[str, Any]]] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -190,8 +191,8 @@ async def check_file_quality(
 
 @router.post("/check-job/{job_id}")
 async def check_job_quality(
-    job_id: int,
-    execution_id: Optional[int] = None,
+    job_id: UUID,
+    execution_id: Optional[UUID] = None,
     quality_config: Optional[Dict[str, Any]] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)
@@ -295,7 +296,7 @@ async def get_quality_alerts(
 
 @router.post("/monitor/alerts/{alert_id}/resolve")
 async def resolve_quality_alert(
-    alert_id: int,
+    alert_id: UUID,
     resolution_notes: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session_dependency)

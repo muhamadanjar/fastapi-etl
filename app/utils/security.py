@@ -18,6 +18,7 @@ import os
 from app.core.config import get_settings
 
 from app.utils.logger import get_logger
+from uuid import UUID
 
 
 settings = get_settings()
@@ -368,7 +369,7 @@ def verify_api_key(api_key: str, hashed_key: str) -> bool:
         return False
 
 
-def create_session_token(user_id: int, session_data: Optional[Dict[str, Any]] = None) -> str:
+def create_session_token(user_id: UUID, session_data: Optional[Dict[str, Any]] = None) -> str:
     """
     Create a session token for user authentication.
     

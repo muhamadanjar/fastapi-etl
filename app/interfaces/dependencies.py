@@ -5,15 +5,19 @@ from sqlalchemy import insert, literal
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 import uuid
 
-from app.core.config import settings
+from app.core.rbac import user_has_admin_role, extract_role_names
 from app.infrastructure.db.manager import get_session_dependency, database_manager
 from app.infrastructure.cache import cache_manager
 from app.schemas.remote_user import RemoteUserInfo
 from app.infrastructure.db.models.auth import User
+from app.core.config import get_settings
+
+
 
 security = HTTPBearer()
 
 get_db = get_session_dependency
+settings = get_settings()
 
 
 async def _sync_user_to_db(user_info: RemoteUserInfo) -> None:
@@ -102,29 +106,35 @@ async def _fetch_user_info(token: str) -> RemoteUserInfo:
     await _sync_user_to_db(user_info)
 
     if cache:
-        await cache.set(cache_key, user_data, ttl=60)
+        await cache.set(cache_key, user_data, ttl=30)
     return user_info
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> RemoteUserInfo:
-    return await _fetch_user_info(credentials.credentials)
+    user = await _fetch_user_info(credentials.credentials)
+    # Enforce active status globally (covers all 144 endpoints that depend on
+    # get_current_user). Inactive users from the usermanagement service must
+    # not be able to use the API even with a still-valid token.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
+    return user
 
 
 async def get_current_active_user(
     current_user: RemoteUserInfo = Depends(get_current_user),
 ) -> RemoteUserInfo:
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user",
-        )
+    # is_active is already enforced in get_current_user; this wrapper exists
+    # for semantic clarity / future per-route use.
     return current_user
 
 
 async def get_admin_user(
-    current_user: RemoteUserInfo = Depends(get_current_active_user),
+    current_user: RemoteUserInfo = Depends(get_current_user),
 ) -> RemoteUserInfo:
     if not current_user.is_superuser:
         raise HTTPException(
@@ -132,3 +142,70 @@ async def get_admin_user(
             detail="Not enough permissions",
         )
     return current_user
+
+
+def require_roles(*required_roles: str):
+    """Dependency factory: require the user to have at least one of the
+    given roles. Superusers always pass.
+
+    NOTE: because the system is fully dynamic (roles managed in
+    fastapi_usermanagement), prefer calling ``require_roles()`` *without*
+    arguments — it then enforces the configured admin role set
+    (``SecuritySettings.admin_roles`` / env ``ADMIN_ROLES``) instead of
+    hardcoding role names in endpoint code.
+    """
+
+    async def _checker(
+        current_user: RemoteUserInfo = Depends(get_current_user),
+    ) -> RemoteUserInfo:
+        if current_user.is_superuser:
+            return current_user
+        # Dynamic mode: no args supplied -> use the configurable admin role set.
+        if not required_roles:
+            if user_has_admin_role(current_user.roles):
+                return current_user
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requires an administrative role",
+            )
+        # Explicit (static) mode: match against supplied role names.
+        user_roles = extract_role_names(current_user.roles)
+        if not user_roles.intersection({r.lower() for r in required_roles}):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of roles: {', '.join(required_roles)}",
+            )
+        return current_user
+
+    return _checker
+
+
+def require_privileges(*required_privileges: str):
+    """Dependency factory: require the user to have all of the given
+    privileges. Superusers always pass.
+
+    The usermanagement ``/auth/info`` endpoint currently returns *menus* under
+    ``privileges`` (not permission tokens). Until that service emits explicit
+    permission strings, call this *without* arguments to deny non-superusers,
+    or supply concrete permission tokens once available.
+    """
+
+    async def _checker(
+        current_user: RemoteUserInfo = Depends(get_current_user),
+    ) -> RemoteUserInfo:
+        if current_user.is_superuser:
+            return current_user
+        if not required_privileges:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requires explicit privileges",
+            )
+        user_privs = extract_role_names(current_user.privileges)
+        if not set(required_privileges).issubset(user_privs):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing required privileges: {', '.join(required_privileges)}",
+            )
+        return current_user
+
+    return _checker

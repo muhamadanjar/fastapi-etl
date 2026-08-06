@@ -73,7 +73,7 @@ class StandardizedDataCreate(StandardizedDataBase):
 
 class StandardizedDataUpdate(SQLModel):
     """Schema untuk update standardized data"""
-    source_file_id: Optional[int] = Field(default=None)
+    source_file_id: Optional[UUID] = Field(default=None)
     source_record_id: Optional[int] = Field(default=None)
     entity_type: Optional[str] = Field(default=None, max_length=100)
     standardized_data: Optional[Dict[str, Any]] = Field(default=None)
@@ -85,14 +85,14 @@ class StandardizedDataUpdate(SQLModel):
 
 class StandardizedDataRead(StandardizedDataBase):
     """Schema untuk read standardized data"""
-    staging_id: int
+    staging_id: UUID
     created_at: datetime
 
 
 class StandardizedDataFilter(SQLModel):
     """Schema untuk filter standardized data"""
     entity_type: Optional[str] = Field(default=None)
-    source_file_id: Optional[int] = Field(default=None)
+    source_file_id: Optional[UUID] = Field(default=None)
     batch_id: Optional[str] = Field(default=None)
     quality_score_min: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)
     quality_score_max: Optional[Decimal] = Field(default=None, max_digits=3, decimal_places=2)

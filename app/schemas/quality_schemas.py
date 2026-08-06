@@ -32,8 +32,8 @@ class QualityRuleRead(QualityRuleCreate):
 
 
 class QualityCheckResultCreate(BaseModel):
-    execution_id: int
-    rule_id: int
+    execution_id: UUID
+    rule_id: UUID
     check_result: Optional[str] = None
     records_checked: Optional[int] = None
     records_passed: Optional[int] = None
@@ -57,8 +57,8 @@ class QualityRuleUpdate(BaseModel):
 
 class QualityReport(BaseModel):
     """Schema for quality report."""
-    execution_id: int
-    rule_id: int
+    execution_id: UUID
+    rule_id: UUID
     check_result: str
     records_checked: int
     records_passed: int

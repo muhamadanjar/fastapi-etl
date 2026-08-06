@@ -11,6 +11,7 @@ from app.infrastructure.db.models.processed.entities import Entity
 from app.infrastructure.db.models.processed.entity_relationships import EntityRelationship
 from app.core.exceptions import EntityError
 from app.utils.date_utils import get_current_timestamp
+from uuid import UUID
 
 
 class EntityService(BaseService):
@@ -63,7 +64,7 @@ class EntityService(BaseService):
             self.db.rollback()
             self.handle_error(e, "create_entity")
     
-    async def get_entity_by_id(self, entity_id: int) -> Optional[Dict[str, Any]]:
+    async def get_entity_by_id(self, entity_id: UUID) -> Optional[Dict[str, Any]]:
         """Get entity by ID."""
         try:
             self.log_operation("get_entity_by_id", {"entity_id": entity_id})
@@ -117,7 +118,7 @@ class EntityService(BaseService):
         except Exception as e:
             self.handle_error(e, "get_entity_by_key")
     
-    async def update_entity(self, entity_id: int, entity_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_entity(self, entity_id: UUID, entity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update an existing entity."""
         try:
             self.log_operation("update_entity", {"entity_id": entity_id})
@@ -152,7 +153,7 @@ class EntityService(BaseService):
             self.db.rollback()
             self.handle_error(e, "update_entity")
     
-    async def delete_entity(self, entity_id: int, hard_delete: bool = False) -> bool:
+    async def delete_entity(self, entity_id: UUID, hard_delete: bool = False) -> bool:
         """Delete an entity (soft or hard delete)."""
         try:
             self.log_operation("delete_entity", {"entity_id": entity_id, "hard_delete": hard_delete})
@@ -277,7 +278,7 @@ class EntityService(BaseService):
             self.db.rollback()
             self.handle_error(e, "create_relationship")
     
-    async def get_entity_relationships(self, entity_id: int, relationship_type: str = None) -> List[Dict[str, Any]]:
+    async def get_entity_relationships(self, entity_id: UUID, relationship_type: str = None) -> List[Dict[str, Any]]:
         """Get all relationships for an entity."""
         try:
             self.log_operation("get_entity_relationships", {"entity_id": entity_id})
@@ -370,7 +371,7 @@ class EntityService(BaseService):
     
     async def merge_entity_data(
         self,
-        entity_id: int,
+        entity_id: UUID,
         new_data: Dict[str, Any],
         conflict_strategy: str = "newer_wins",
         confidence_score: float = 1.0
@@ -462,10 +463,10 @@ class EntityService(BaseService):
 
     async def update_entity_with_lineage(
         self,
-        entity_id: int,
+        entity_id: UUID,
         new_data: Dict[str, Any],
-        source_record_id: int,
-        job_execution_id: int,
+        source_record_id: UUID,
+        job_execution_id: UUID,
         change_reason: str = "Data update"
     ) -> Dict[str, Any]:
         """
@@ -535,8 +536,8 @@ class EntityService(BaseService):
 
     async def mark_as_duplicate(
         self,
-        duplicate_entity_id: int,
-        master_entity_id: int,
+        duplicate_entity_id: UUID,
+        master_entity_id: UUID,
         match_score: float = 0.0,
         match_metadata: Dict[str, Any] = None
     ) -> Dict[str, Any]:
@@ -594,7 +595,7 @@ class EntityService(BaseService):
             self.handle_error(e, "mark_as_duplicate")
 
     # Private helper methods
-    async def _delete_entity_relationships(self, entity_id: int):
+    async def _delete_entity_relationships(self, entity_id: UUID):
         """Delete all relationships for an entity."""
         stmt = select(EntityRelationship).where(or_(
             EntityRelationship.entity_from == entity_id,
