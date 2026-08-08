@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/anjar/.cache/uv/archive-v0/q3ytmjlWcHsNgU2Ob4vid/bin/graphify hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/anjar/.cache/uv/archive-v0/q3ytmjlWcHsNgU2Ob4vid/bin/graphify hook-guard read"
+          }
+        ]
+      }
+    ]
+  }
+}
