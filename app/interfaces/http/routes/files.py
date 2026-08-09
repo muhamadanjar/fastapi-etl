@@ -159,7 +159,7 @@ async def download_file(
     """Download original file"""
     try:
         file_service = FileService(db)
-        return await file_service.download_file(file_id)
+        return await file_service.download_file(file_id, current_user.id)
     except Exception as e:
         raise NotFoundError(message=str(e))
 
@@ -174,7 +174,7 @@ async def preview_file_data(
     """Preview file data (first N rows)"""
     try:
         file_service = FileService(db)
-        return await file_service.preview_file_data(file_id, rows)
+        return await file_service.preview_file_data(file_id, rows, current_user.id)
     except Exception as e:
         raise BadRequestError(message=str(e))
 
@@ -188,7 +188,7 @@ async def get_processing_status(
     """Get current processing status of a file"""
     try:
         file_service = FileService(db)
-        file_detail = await file_service.get_file_detail(file_id)
+        file_detail = await file_service.get_file_detail(file_id, current_user.id)
 
         if not file_detail:
             raise NotFoundError(message="File not found")
@@ -258,7 +258,7 @@ async def get_file_detail(
 ) -> FileDetailResponse:
     """Get detailed information about a specific file"""
     file_service = FileService(db)
-    file_detail = await file_service.get_file_detail(file_id)
+    file_detail = await file_service.get_file_detail(file_id, current_user.id)
 
     if not file_detail:
         raise NotFoundError(message="File not found")

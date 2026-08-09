@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 class ColumnStructureCreate(BaseModel):
-    file_id: int
+    file_id: UUID
     column_name: str
     column_position: int
     data_type: str
@@ -16,12 +16,12 @@ class ColumnStructureCreate(BaseModel):
 
 
 class ColumnStructureRead(ColumnStructureCreate):
-    structure_id: int
+    structure_id: UUID
     created_at: datetime
 
 
 class RawRecordCreate(BaseModel):
-    file_id: int
+    file_id: UUID
     sheet_name: Optional[str]
     row_number: Optional[int]
     column_mapping: Optional[dict] = {}
@@ -33,7 +33,7 @@ class RawRecordCreate(BaseModel):
 
 
 class RawRecordRead(RawRecordCreate):
-    record_id: int
+    record_id: UUID
     created_at: datetime
 
 

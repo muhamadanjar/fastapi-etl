@@ -7,6 +7,7 @@ from datetime import datetime
 from celery.result import AsyncResult
 from app.tasks import celery_app
 from app.infrastructure.tasks.tasks import email_tasks, data_sync_tasks
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class TaskService:
         logger.info(f"Bulk email task queued: {task.id}")
         return task.id
     
-    def send_welcome_email(self, user_id: int, user_email: str, user_name: str) -> str:
+    def send_welcome_email(self, user_id: UUID, user_email: str, user_name: str) -> str:
         """Send welcome email to new user."""
         task = email_tasks.send_welcome_email.apply_async(
             args=[user_id, user_email, user_name],

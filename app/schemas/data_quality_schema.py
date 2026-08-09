@@ -5,6 +5,7 @@ Data Quality schemas for request/response validation.
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, validator
+from uuid import UUID
 
 
 # ==============================================
@@ -88,7 +89,7 @@ class QualityRuleUpdate(BaseModel):
 
 class QualityRuleRead(QualityRuleBase):
     """Schema for quality rule response"""
-    rule_id: int
+    rule_id: UUID
     created_at: datetime
     usage_stats: Optional[Dict[str, Any]] = None
     
@@ -104,7 +105,7 @@ class QualityCheckRequest(BaseModel):
     """Schema for quality check request"""
     data_batch: List[Dict[str, Any]]
     entity_type: str
-    rule_ids: Optional[List[int]] = None
+    rule_ids: Optional[List[UUID]] = None
     check_config: Optional[Dict[str, Any]] = None
     
     @validator('data_batch')
@@ -255,7 +256,7 @@ class QualityReportResponse(BaseModel):
 
 class QualityAlert(BaseModel):
     """Schema for quality alert"""
-    alert_id: int
+    alert_id: UUID
     rule_name: str
     entity_type: str
     severity: str
@@ -307,7 +308,7 @@ class QualityCheckSchedule(BaseModel):
     """Schema for quality check schedule"""
     entity_type: str
     schedule_expression: str  # Cron expression
-    rule_ids: Optional[List[int]] = None
+    rule_ids: Optional[List[UUID]] = None
     check_config: Optional[Dict[str, Any]] = None
     is_active: bool = True
     
@@ -347,21 +348,21 @@ class QualitySummary(BaseModel):
 
 class FileQualityCheck(BaseModel):
     """Schema for file quality check"""
-    file_id: int
+    file_id: UUID
     validation_rules: Optional[List[ValidationRule]] = None
 
 
 class EntityQualityCheck(BaseModel):
     """Schema for entity quality check"""
     entity_type: str
-    entity_ids: Optional[List[int]] = None
+    entity_ids: Optional[List[UUID]] = None
     quality_config: Optional[Dict[str, Any]] = None
 
 
 class JobQualityCheck(BaseModel):
     """Schema for job quality check"""
-    job_id: int
-    execution_id: Optional[int] = None
+    job_id: UUID
+    execution_id: Optional[UUID] = None
     quality_config: Optional[Dict[str, Any]] = None
 
 
@@ -412,7 +413,7 @@ class QualityProfileCreate(QualityProfile):
 
 class QualityProfileRead(QualityProfile):
     """Schema for quality profile response"""
-    profile_id: int
+    profile_id: UUID
     created_at: datetime
     updated_at: Optional[datetime]
     created_by: Optional[int]
