@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column
+from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from enum import Enum
 from app.infrastructure.db.models.base import BaseModel
@@ -38,7 +39,7 @@ class DataSourceBase(BaseModel):
         description="Unique name for the data source"
     )
     source_type: SourceType = Field(
-        index=True,
+        sa_column=Column(String(50), nullable=False, index=True),
         description="Type of data source"
     )
     description: Optional[str] = Field(
@@ -53,6 +54,7 @@ class DataSourceBase(BaseModel):
     )
     credentials_encrypted: Optional[str] = Field(
         default=None,
+        sa_column=Column(Text),
         description="Encrypted credentials for authentication"
     )
     is_active: bool = Field(
@@ -62,7 +64,7 @@ class DataSourceBase(BaseModel):
     )
     connection_status: ConnectionStatus = Field(
         default=ConnectionStatus.INACTIVE,
-        index=True,
+        sa_column=Column(String(20), nullable=False, index=True),
         description="Current connection status"
     )
     last_connection_test: Optional[datetime] = Field(
@@ -100,6 +102,7 @@ class DataSource(DataSourceBase, table=True):
     created_by: Optional[UUID] = Field(
         default=None,
         foreign_key="users.id",
+        ondelete="SET NULL",
         description="User who created this data source"
     )
     

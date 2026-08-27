@@ -11,12 +11,15 @@ from alembic import context
 from sqlmodel import SQLModel, create_engine
 
 from app.infrastructure.db.models.config import *
+from app.infrastructure.db.models.auth import *
 from app.infrastructure.db.models.raw_data import *
+from app.infrastructure.db.models.raw_data.upload_session import *
 from app.infrastructure.db.models.audit import *
 from app.infrastructure.db.models.etl_control import *
 from app.infrastructure.db.models.processed import *
 from app.infrastructure.db.models.staging import *
 from app.infrastructure.db.models.transformation import *
+from app.infrastructure.db.models.workspace import *
 
 settings = get_settings()
 
@@ -74,14 +77,25 @@ def get_next_revision_id() -> str:
 
 def process_revision_directives(context, revision, directives):
     """Assign sequential revision IDs to new migrations."""
-    if directives:
-        for directive in directives:
-            if directive.upgrade_ops.is_empty():
-                return
-            directive.revision = get_next_revision_id()
-            if directive.down_revision:
-                directive.down_revision = directive.down_revision
-            directive.branch_labels = None
+    if not directives:
+        return
+
+    migration_script = directives[0]
+    command = getattr(getattr(config, "cmd_opts", None), "cmd", None)
+    command_name = command[0].__name__ if command else None
+    if migration_script.upgrade_ops.is_empty():
+        # `alembic check` needs the empty MigrationScript to remain available
+        # so it can report "no new operations". Only suppress empty generated
+        # revision files for the revision command itself.
+        if command_name == "revision":
+            directives.clear()
+        return
+
+    # MigrationScript exposes rev_id; `revision` and `down_revision` belong to
+    # loaded Script revisions and assigning them here either has no effect or
+    # raises during `alembic check`.
+    if command_name == "revision":
+        migration_script.rev_id = get_next_revision_id()
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -101,6 +115,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
         process_revision_directives=process_revision_directives,
     )
 
@@ -126,6 +141,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_schemas=True,
             process_revision_directives=process_revision_directives,
         )
 

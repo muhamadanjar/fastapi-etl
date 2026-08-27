@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Column
+from sqlalchemy import String
 from enum import Enum
 from app.infrastructure.db.models.base import BaseModel
 
@@ -18,16 +19,19 @@ class JobDependencyBase(BaseModel):
     """Base model for JobDependency"""
     parent_job_id: UUID = Field(
         foreign_key="etl_control.etl_jobs.id",
+        ondelete="CASCADE",
         index=True,
         description="Parent job that must complete first"
     )
     child_job_id: UUID = Field(
         foreign_key="etl_control.etl_jobs.id",
+        ondelete="CASCADE",
         index=True,
         description="Child job that depends on parent"
     )
     dependency_type: DependencyType = Field(
         default=DependencyType.SUCCESS,
+        sa_column=Column(String(50), nullable=False),
         description="Type of dependency relationship"
     )
     is_active: bool = Field(

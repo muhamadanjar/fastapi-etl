@@ -7,7 +7,6 @@ from typing import Optional, List
 
 from app.core.exceptions import AuthenticationException, AuthorizationException
 from app.core.config import settings
-from app.infrastructure.cache import cache_manager
 from app.schemas.remote_user import RemoteUserInfo
 from app.utils.logger import get_logger
 
@@ -37,7 +36,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not token:
                 raise AuthenticationException("Missing authentication token")
 
-            user = await self._validate_token(token)
+            user = await self._authorize(token, self._required_permission(request))
             if not user:
                 raise AuthenticationException("Invalid authentication token")
 
@@ -54,23 +53,33 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Auth failed: {e} — {request.url.path}")
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": str(e), "type": "authentication_error"},
+                content={"error": {"code": "AUTHENTICATION_ERROR", "message": str(e), "details": {}}},
             )
         except AuthorizationException as e:
             logger.warning(f"Authz failed: {e} — {request.url.path}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": str(e), "type": "authorization_error"},
+                content={"error": {"code": "AUTHORIZATION_ERROR", "message": str(e), "details": {}}},
+            )
+        except RuntimeError as e:
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"error": {"code": "AUTHORIZATION_UNAVAILABLE", "message": str(e), "details": {}}},
             )
         except Exception as e:
             logger.error(f"Auth middleware error: {e}")
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": "Internal authentication error"},
+                content={"error": {"code": "AUTHENTICATION_INTERNAL_ERROR", "message": "Internal authentication error", "details": {}}},
             )
 
     def _should_skip_auth(self, path: str) -> bool:
-        return any(excluded in path for excluded in self.exclude_paths)
+        normalized = path.rstrip("/") or "/"
+        return any(
+            normalized == excluded.rstrip("/")
+            or normalized.startswith(f"{excluded.rstrip('/')}/")
+            for excluded in self.exclude_paths
+        )
 
     def _extract_token(self, request: Request) -> Optional[str]:
         authorization = request.headers.get("Authorization")
@@ -82,40 +91,70 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except ValueError:
             return None
 
-    async def _validate_token(self, token: str) -> Optional[RemoteUserInfo]:
-        cache_key = f"auth_gateway:{token[:32]}"
-        cache = await cache_manager.get_cache()
-        if cache:
-            cached = await cache.get(cache_key)
-            if cached:
-                return RemoteUserInfo(**cached)
+    @staticmethod
+    def _required_permission(request: Request) -> str:
+        path = request.url.path.rstrip("/")
+        method = request.method
 
-        url = f"{settings.security.usermanagement_api_url}/auth/info"
+        if path.startswith("/api/v1/sources"):
+            if "/ingestions/" in path:
+                return "etl.sources.ingest"
+            return "etl.sources.read" if method in {"GET", "HEAD"} else "etl.sources.write"
+
+        if path.startswith("/api/v1/datasets"):
+            if path.endswith("/download"):
+                return "etl.datasets.download"
+            if method == "DELETE":
+                return "etl.datasets.delete"
+            return "etl.datasets.read"
+
+        if path.startswith("/api/v1/recipes"):
+            if path.endswith("/runs"):
+                return "etl.recipes.run"
+            return "etl.recipes.read" if method in {"GET", "HEAD"} else "etl.recipes.write"
+
+        if path.startswith(("/api/v1/runs", "/api/v1/overview")):
+            return "etl.runs.read"
+
+        raise AuthorizationException("No permission mapping exists for this endpoint")
+
+    async def _authorize(self, token: str, permission: str) -> RemoteUserInfo:
+        url = f"{settings.security.usermanagement_api_url}/auth/authorize"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
+                async with session.post(
                     url,
                     headers={"Authorization": f"Bearer {token}"},
+                    json={"permission": permission},
                     timeout=aiohttp.ClientTimeout(total=5),
                 ) as resp:
                     if resp.status == 401:
                         raise AuthenticationException("Invalid or expired token")
+                    if resp.status == 403:
+                        raise AuthorizationException("Permission denied")
                     if resp.status != 200:
-                        raise AuthenticationException("Auth service unavailable")
+                        raise RuntimeError("Authorization service unavailable")
                     body = await resp.json()
         except AuthenticationException:
             raise
+        except AuthorizationException:
+            raise
         except Exception as e:
             logger.error(f"Auth gateway error: {e}")
-            raise AuthenticationException("Auth service unreachable")
+            raise RuntimeError("Authorization service unreachable")
 
-        user_data = body.get("data") or body
-        user = RemoteUserInfo(**user_data)
-
-        if cache:
-            await cache.set(cache_key, user_data, ttl=60)
-
-        return user
+        decision = body.get("data") or body
+        if not decision.get("allowed"):
+            raise AuthorizationException("Permission denied")
+        principal = decision.get("principal") or {}
+        return RemoteUserInfo(
+            id=str(principal["id"]),
+            username=principal["username"],
+            email=principal["email"],
+            name=principal["name"],
+            is_active=True,
+            is_superuser=principal.get("is_superuser", False),
+        )
 
     def _add_security_headers(self, response):
         response.headers["X-Content-Type-Options"] = "nosniff"

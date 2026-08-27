@@ -14,7 +14,6 @@ from .manager import (
     on_shutdown,
 )
 from .dependencies import get_async_session, get_db, get_db_session
-from .repositories.base import BaseRepository
 from .models.base import BaseModel, TimestampMixin
 
 __all__ = [
@@ -39,8 +38,6 @@ __all__ = [
     "close_database_connections",
     "on_startup",
     "on_shutdown",
-    # Repository
-    "BaseRepository",
     # Models
     "BaseModel",
     "TimestampMixin",

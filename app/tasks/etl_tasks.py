@@ -7,6 +7,7 @@ import json
 import shutil
 import traceback
 import hashlib
+from contextlib import nullcontext
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -40,6 +41,7 @@ from app.utils.logger import get_logger
 from app.core.exceptions import ETLException, FileProcessingException
 from app.utils.event_publisher import get_event_publisher
 from app.tasks.task_helpers import log_task_error, get_error_type_from_exception, get_error_severity_from_exception
+from app.infrastructure.upload_artifact_client import UploadArtifactClient
 
 logger = get_logger(__name__)
 
@@ -83,24 +85,26 @@ def process_file_task(self, file_id: str, user_id:str, processing_config: Dict[s
             file_type = file_record.file_type.lower()
             processor = get_processor(file_type, db_session=db, batch_id=task_id)
             
-            # Process the file
-            file_path = file_record.file_path
-            if not os.path.exists(file_path):
-                raise FileProcessingException(f"File not found: {file_path}")
-            
-            # Validate file format
-            # is_valid, error_message = await processor.validate_file_format(file_path)
-            is_valid, error_message = asyncio.run(
-                processor.validate_file_format(file_path)
+            # Artifact-backed sources are materialized only for the duration of
+            # processing; legacy records continue to use their existing paths.
+            source_context = (
+                UploadArtifactClient().materialize(file_record.artifact_id, file_record.file_name)
+                if file_record.artifact_id
+                else nullcontext(file_record.file_path)
             )
-            if not is_valid:
-                raise FileProcessingException(f"Invalid file format: {error_message}")
-            
-            # Process the file
-            # processing_results = await processor.process_file(file_path, file_record)
-            processing_results = asyncio.run(
-                processor.process_file(file_path, file_record)
-            )
+            with source_context as file_path:
+                if not file_path or not os.path.exists(file_path):
+                    raise FileProcessingException(f"File not found: {file_path}")
+
+                is_valid, error_message = asyncio.run(
+                    processor.validate_file_format(file_path)
+                )
+                if not is_valid:
+                    raise FileProcessingException(f"Invalid file format: {error_message}")
+
+                processing_results = asyncio.run(
+                    processor.process_file(file_path, file_record)
+                )
             
             # Update file status based on results
             if processing_results.get('successful_records', 0) > 0:

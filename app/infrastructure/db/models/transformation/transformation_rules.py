@@ -27,6 +27,7 @@ class TransformationRuleBase(BaseModel):
     job_id: Optional[UUID] = Field(
         default=None,
         foreign_key="etl_control.etl_jobs.id",
+        ondelete="SET NULL",
         index=True,
         description="ETL job this rule belongs to"
     )
@@ -62,4 +63,3 @@ class TransformationRuleUpdate(SQLModel):
     priority: Optional[int] = Field(default=None)
     is_active: Optional[bool] = Field(default=None)
     job_id: Optional[UUID] = Field(default=None)
-    

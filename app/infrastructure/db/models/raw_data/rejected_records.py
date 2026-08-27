@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List
 from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column
+from sqlalchemy import Text
 from sqlalchemy.dialects.postgresql import JSONB
 from app.infrastructure.db.models.base import BaseModel
 
@@ -11,12 +12,14 @@ class RejectedRecordBase(BaseModel):
     """Base model for RejectedRecord"""
     source_file_id: UUID = Field(
         foreign_key="raw_data.file_registry.id",
+        ondelete="CASCADE",
         index=True,
         description="Source file ID"
     )
     source_record_id: Optional[UUID] = Field(
         default=None,
         foreign_key="raw_data.raw_records.id",
+        ondelete="SET NULL",
         index=True,
         description="Original raw record ID if available"
     )
@@ -30,6 +33,7 @@ class RejectedRecordBase(BaseModel):
         description="Raw data that was rejected"
     )
     rejection_reason: str = Field(
+        sa_column=Column(Text, nullable=False),
         description="Primary reason for rejection"
     )
     validation_errors: Optional[List[Dict[str, Any]]] = Field(

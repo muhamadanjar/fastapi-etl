@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from uuid import UUID
 
 from sqlmodel import SQLModel, Field, Column, Relationship
+from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from enum import Enum
 from app.infrastructure.db.models.base import BaseModel
@@ -33,20 +34,22 @@ class ErrorLogBase(BaseModel):
     job_execution_id: Optional[UUID] = Field(
         default=None,
         foreign_key="etl_control.job_executions.id",
+        ondelete="CASCADE",
         index=True,
         description="Related job execution ID"
     )
     error_type: ErrorType = Field(
         default=ErrorType.UNKNOWN_ERROR,
-        index=True,
+        sa_column=Column(String(50), nullable=False, index=True),
         description="Type of error that occurred"
     )
     error_severity: ErrorSeverity = Field(
         default=ErrorSeverity.MEDIUM,
-        index=True,
+        sa_column=Column(String(20), nullable=False, index=True),
         description="Severity level of the error"
     )
     error_message: str = Field(
+        sa_column=Column(Text, nullable=False),
         description="Error message"
     )
     error_details: Optional[Dict[str, Any]] = Field(
@@ -56,6 +59,7 @@ class ErrorLogBase(BaseModel):
     )
     stack_trace: Optional[str] = Field(
         default=None,
+        sa_column=Column(Text),
         description="Full stack trace of the error"
     )
     context: Optional[Dict[str, Any]] = Field(
@@ -75,6 +79,7 @@ class ErrorLogBase(BaseModel):
     resolved_by: Optional[UUID] = Field(
         default=None,
         foreign_key="users.id",
+        ondelete="SET NULL",
         description="User who resolved the error"
     )
 

@@ -1,10 +1,15 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query, Request, Header, Path
-from sqlmodel import Session
+from sqlmodel import Session, select
 from typing import List, Optional, Dict, Any
 
 from app.interfaces.dependencies import get_current_user
-from app.schemas.file_upload import FileUploadResponse, FileListResponse, FileDetailResponse
+from app.schemas.file_upload import (
+    ArtifactFileRegistrationRequest,
+    FileUploadResponse,
+    FileListResponse,
+    FileDetailResponse,
+)
 from app.schemas.upload_session import (
     InitUploadSessionRequest,
     InitUploadSessionResponse,
@@ -15,8 +20,22 @@ from app.application.services.file_service import FileService
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.schemas.remote_user import RemoteUserInfo as User
 from app.infrastructure.db.manager import get_session_dependency
+from app.infrastructure.db.models.raw_data.file_registry import FileRegistry
+from app.infrastructure.upload_artifact_client import UploadArtifactClient
+from app.core.enums import FileTypeEnum, ProcessingStatus
+from pathlib import Path as FilePath
+from datetime import datetime
 
 router = APIRouter()
+
+
+_ARTIFACT_FILE_TYPES = {
+    ".csv": FileTypeEnum.CSV,
+    ".xls": FileTypeEnum.EXCEL,
+    ".xlsx": FileTypeEnum.EXCEL,
+    ".json": FileTypeEnum.JSON,
+    ".xml": FileTypeEnum.XML,
+}
 
 # Exact path routes first (highest specificity)
 @router.post("/upload/session", response_model=InitUploadSessionResponse)
@@ -28,6 +47,70 @@ async def init_upload_session(
     """Initiate a chunked upload session for large files"""
     service = FileService(db)
     return await service.init_upload_session(request, user_id=current_user.id)
+
+
+@router.post("/artifacts", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
+async def register_upload_artifact(
+    body: ArtifactFileRegistrationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session_dependency),
+) -> FileUploadResponse:
+    """Register an available upload_api artifact as an ETL source without copying it permanently."""
+    existing = db.exec(
+        select(FileRegistry).where(FileRegistry.artifact_id == body.artifact_id)
+    ).first()
+    if existing:
+        if existing.created_by != current_user.id:
+            raise NotFoundError(message="Upload artifact registration not found")
+        return FileUploadResponse(
+            file_id=existing.id,
+            file_name=existing.file_name,
+            file_type=existing.file_type,
+            file_size=existing.file_size,
+            batch_id=existing.batch_id,
+            processing_status=existing.processing_status,
+            upload_date=existing.upload_date,
+        )
+
+    client = UploadArtifactClient()
+    # A stable future registry ID is needed as the idempotent lease reference.
+    registry_id = uuid4()
+    lease = await client.acquire_lease(body.artifact_id, body.grant_id, str(registry_id))
+    try:
+        artifact = await client.metadata(body.artifact_id)
+        suffix = FilePath(artifact["filename"]).suffix.lower()
+        file_type = _ARTIFACT_FILE_TYPES.get(suffix)
+        if not file_type:
+            raise BadRequestError(message=f"Artifact file extension {suffix or '(none)'} is not supported by ETL")
+        record = FileRegistry(
+            id=registry_id,
+            file_name=artifact["filename"],
+            file_path=f"artifact://{body.artifact_id}",
+            artifact_id=body.artifact_id,
+            artifact_lease_id=lease["lease_id"],
+            file_type=file_type,
+            file_size=artifact["size_bytes"],
+            source_system=body.source_system,
+            batch_id=body.batch_id,
+            created_by=current_user.id,
+            processing_status=ProcessingStatus.PENDING,
+            file_metadata={**(body.metadata or {}), "upload_artifact": artifact},
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+    except Exception:
+        await client.release_lease(body.artifact_id, lease["lease_id"])
+        raise
+    return FileUploadResponse(
+        file_id=record.id,
+        file_name=record.file_name,
+        file_type=record.file_type,
+        file_size=record.file_size,
+        batch_id=record.batch_id,
+        processing_status=record.processing_status,
+        upload_date=record.upload_date,
+    )
 
 
 @router.post("/batch-upload")

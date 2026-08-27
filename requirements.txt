@@ -1,6 +1,7 @@
 aio-pika==9.5.5
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.14
+-e ../../libs/service_auth[test]
 asyncpg==0.31.0
 aiormq==6.8.1
 aiosignal==1.4.0

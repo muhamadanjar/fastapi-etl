@@ -24,6 +24,7 @@ class FieldMappingBase(BaseModel):
     job_id: Optional[UUID] = Field(
         default=None,
         foreign_key="etl_control.etl_jobs.id",
+        ondelete="SET NULL",
         index=True,
         description="ETL job this mapping belongs to"
     )

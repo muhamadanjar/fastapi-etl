@@ -11,6 +11,7 @@ class PerformanceMetricBase(BaseModel):
     """Base model for PerformanceMetric"""
     execution_id: UUID = Field(
         foreign_key="etl_control.job_executions.id",
+        ondelete="CASCADE",
         index=True,
         description="Related job execution ID"
     )

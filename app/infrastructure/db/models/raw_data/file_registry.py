@@ -23,6 +23,20 @@ class FileRegistry(BaseModel, table=True):
         max_length=500,
         description="Path where the file is stored"
     )
+
+    artifact_id: Optional[str] = Field(
+        default=None,
+        max_length=36,
+        index=True,
+        unique=True,
+        description="Immutable source artifact owned by upload_api for new upload flows",
+    )
+
+    artifact_lease_id: Optional[str] = Field(
+        default=None,
+        max_length=36,
+        description="Active upload_api lease retained while this registry references the artifact",
+    )
     
     file_type: FileTypeEnum = Field(
         description="Type of the file (CSV, EXCEL, JSON, XML, API)"

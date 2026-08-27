@@ -25,6 +25,14 @@ class FileUploadRequest(BaseModel):
     validation_rules: Optional[List[str]] = Field(default=None, description="Validation rules to apply")
 
 
+class ArtifactFileRegistrationRequest(BaseModel):
+    artifact_id: str = Field(min_length=36, max_length=36)
+    grant_id: str = Field(min_length=36, max_length=36)
+    source_system: str = Field(min_length=1, max_length=100)
+    batch_id: Optional[str] = Field(default=None, max_length=50)
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class FileUploadResponse(BaseResponse):
     """Schema for file upload response."""
     file_id: UUID
@@ -166,4 +174,3 @@ class FileDetailResponse(BaseResponse):
     processing_status: Optional[FileProcessingStatus] = None
     validation_result: Optional[FileValidationResult] = None
 
-    
